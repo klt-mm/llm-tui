@@ -28,6 +28,7 @@ pub enum UserEvent {
     OpenModelSelector,
     OpenProviderSelector,
     OpenGenerationSettings,
+    OpenBranchHistory,
     SearchNavigateUp,
     SearchNavigateDown,
     SearchOpenResult,

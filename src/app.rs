@@ -9,14 +9,14 @@ use uuid::Uuid;
 use crate::config::{ContextConfig, GenerationConfig};
 use crate::context::{self, ContextPolicy};
 use crate::domain::{
-    Conversation, GenerationParameters, GenerationUsage, Message, Model, Prompt, Provider,
-    ProviderProtocol, Role,
+    Conversation, GenerationParameters, GenerationRun, GenerationUsage, Message, Model, Prompt,
+    Provider, ProviderProtocol, Role,
 };
 use crate::events::{AppEvent, ProviderEvent, UserEvent};
 use crate::llm::provider::{ChatRequest, LlmProvider, StreamEvent};
 use crate::persistence::repositories::{
-    ConversationRepository, MessageRepository, ModelRepository, PromptRepository,
-    ProviderRepository,
+    ConversationRepository, GenerationRunRepository, MessageRepository, ModelRepository,
+    PromptRepository, ProviderRepository,
 };
 
 pub struct StreamingState {
@@ -25,6 +25,12 @@ pub struct StreamingState {
     pub cancel: CancellationToken,
     pub started_at: std::time::Instant,
     pub usage: Option<GenerationUsage>,
+}
+
+pub struct GenerationMetrics {
+    pub tokens_per_second: f64,
+    pub total_tokens: u64,
+    pub duration_ms: f64,
 }
 
 pub enum Modal {
@@ -68,6 +74,9 @@ pub enum Modal {
         prompt_id: Uuid,
         name: String,
     },
+    BranchHistory {
+        selected: usize,
+    },
     ModelSelector {
         selected: usize,
     },
@@ -91,6 +100,7 @@ pub enum Command {
     ModelSelector,
     ProviderSelector,
     GenerationSettings,
+    BranchHistory,
     TestConnection,
     Help,
     Quit,
@@ -105,6 +115,7 @@ impl Command {
         Command::ModelSelector,
         Command::ProviderSelector,
         Command::GenerationSettings,
+        Command::BranchHistory,
         Command::TestConnection,
         Command::Help,
         Command::Quit,
@@ -119,6 +130,7 @@ impl Command {
             Command::ModelSelector => "Select Model",
             Command::ProviderSelector => "Select Provider",
             Command::GenerationSettings => "Generation Settings",
+            Command::BranchHistory => "Branch History",
             Command::TestConnection => "Test Connection",
             Command::Help => "Keyboard Shortcuts",
             Command::Quit => "Quit",
@@ -162,11 +174,13 @@ pub struct App {
     pub search_results: Vec<SearchResultEntry>,
     pub search_selection: usize,
     pub provider_id: Uuid,
+    pub last_generation_metrics: Option<GenerationMetrics>,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
     model_repo: Arc<dyn ModelRepository>,
     provider_repo: Arc<dyn ProviderRepository>,
     prompt_repo: Arc<dyn PromptRepository>,
+    generation_run_repo: Arc<dyn GenerationRunRepository>,
     event_tx: mpsc::Sender<AppEvent>,
 }
 
@@ -191,6 +205,7 @@ impl App {
         model_repo: Arc<dyn ModelRepository>,
         provider_repo: Arc<dyn ProviderRepository>,
         prompt_repo: Arc<dyn PromptRepository>,
+        generation_run_repo: Arc<dyn GenerationRunRepository>,
         generation: GenerationConfig,
         context: ContextConfig,
         event_tx: mpsc::Sender<AppEvent>,
@@ -220,11 +235,13 @@ impl App {
             search_results: Vec::new(),
             search_selection: 0,
             provider_id: Uuid::nil(),
+            last_generation_metrics: None,
             conversation_repo,
             message_repo,
             model_repo,
             provider_repo,
             prompt_repo,
+            generation_run_repo,
             event_tx,
         }
     }
@@ -489,6 +506,9 @@ impl App {
                     Modal::GenerationSettings { field, .. } => {
                         *field = field.saturating_sub(1);
                     }
+                    Modal::BranchHistory { selected } => {
+                        *selected = selected.saturating_sub(1);
+                    }
                     _ => {}
                 },
                 UserEvent::NavigateDown | UserEvent::PromptFieldNext => match &mut self.modal {
@@ -527,6 +547,10 @@ impl App {
                     }
                     Modal::GenerationSettings { field, .. } => {
                         *field = (*field + 1).min(2);
+                    }
+                    Modal::BranchHistory { selected } => {
+                        let max = self.messages.len().saturating_sub(1);
+                        *selected = (*selected + 1).min(max);
                     }
                     _ => {}
                 },
@@ -808,6 +832,9 @@ impl App {
                     field: 0,
                 };
             }
+            UserEvent::OpenBranchHistory => {
+                self.modal = Modal::BranchHistory { selected: 0 };
+            }
             UserEvent::SearchNavigateUp => {
                 self.search_selection = self.search_selection.saturating_sub(1);
             }
@@ -888,6 +915,48 @@ impl App {
                 if let Err(e) = self.message_repo.create(&message).await {
                     self.error = Some(format!("Failed to persist message: {e}"));
                 }
+
+                // Persist generation run with metrics
+                if let Some(ref state) = self.streaming {
+                    let elapsed = state.started_at.elapsed();
+                    let run = GenerationRun {
+                        id: Uuid::new_v4(),
+                        message_id: message.id,
+                        provider_id: self.provider_id,
+                        model_id: self.selected_model.clone().unwrap_or_default(),
+                        started_at: Utc::now()
+                            - chrono::Duration::milliseconds(elapsed.as_millis() as i64),
+                        completed_at: Some(Utc::now()),
+                        prompt_tokens: state.usage.as_ref().and_then(|u| u.prompt_tokens),
+                        completion_tokens: state.usage.as_ref().and_then(|u| u.completion_tokens),
+                        total_tokens: state.usage.as_ref().and_then(|u| u.total_tokens),
+                        prompt_ms: state.usage.as_ref().and_then(|u| u.prompt_ms),
+                        generation_ms: Some(elapsed.as_secs_f64() * 1000.0),
+                        metadata: serde_json::json!({}),
+                    };
+                    if let Err(e) = self.generation_run_repo.create(&run).await {
+                        warn!(%e, "failed to persist generation run");
+                    }
+
+                    // Store final metrics for status bar display
+                    let total_tokens = state
+                        .usage
+                        .as_ref()
+                        .and_then(|u| u.completion_tokens)
+                        .unwrap_or(0);
+                    let duration_secs = elapsed.as_secs_f64();
+                    let tps = if duration_secs > 0.0 {
+                        total_tokens as f64 / duration_secs
+                    } else {
+                        0.0
+                    };
+                    self.last_generation_metrics = Some(GenerationMetrics {
+                        tokens_per_second: tps,
+                        total_tokens,
+                        duration_ms: duration_secs * 1000.0,
+                    });
+                }
+
                 self.messages.push(message);
                 self.streaming = None;
                 self.touch_conversation().await;
@@ -1381,6 +1450,14 @@ impl App {
                     "generation settings updated"
                 );
             }
+            Modal::BranchHistory { selected } => {
+                let sel = *selected;
+                self.modal = Modal::None;
+                if let Some(msg) = self.messages.get(sel) {
+                    self.input = msg.content.clone();
+                    debug!(message_id = %msg.id, "edit as branch: copied message to input");
+                }
+            }
             _ => {
                 self.modal = Modal::None;
             }
@@ -1450,6 +1527,7 @@ impl App {
             }
             Command::TestConnection => self.test_connection().await,
             Command::Help => self.modal = Modal::Help,
+            Command::BranchHistory => self.modal = Modal::BranchHistory { selected: 0 },
             Command::Quit => self.should_quit = true,
         }
     }

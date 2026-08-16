@@ -73,6 +73,9 @@ pub async fn run(app: &mut App) -> Result<()> {
                         KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             Some(UserEvent::OpenGenerationSettings)
                         }
+                        KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(UserEvent::OpenBranchHistory)
+                        }
                         KeyCode::Char('/') => Some(UserEvent::InputChar('/')),
                         KeyCode::Tab => Some(UserEvent::ToggleFocus),
                         KeyCode::Up => Some(UserEvent::NavigateUp),
@@ -166,6 +169,11 @@ fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layou
             "streaming...".into()
         };
         format!(" | {tps}")
+    } else if let Some(ref metrics) = app.last_generation_metrics {
+        format!(
+            " | {:.1} tok/s | {} tok | {:.0}ms",
+            metrics.tokens_per_second, metrics.total_tokens, metrics.duration_ms
+        )
     } else {
         String::new()
     };
@@ -299,6 +307,27 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
             Role::Assistant => ("assistant", Color::Cyan),
             Role::Tool => ("tool", Color::Magenta),
         };
+
+        // Show branch indicator if this message has a parent
+        if let Some(parent_id) = msg.parent_id
+            && let Some(parent) = app.messages.iter().find(|m| m.id == parent_id)
+        {
+            let parent_snippet = if parent.content.len() > 30 {
+                format!("{}...", &parent.content[..27])
+            } else {
+                parent.content.clone()
+            };
+            let parent_label = match parent.role {
+                Role::User => "you",
+                Role::Assistant => "assistant",
+                Role::System => "system",
+                Role::Tool => "tool",
+            };
+            lines.push(Line::from(Span::styled(
+                format!("  ↩ reply to {}: {}", parent_label, parent_snippet),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
 
         lines.push(Line::from(Span::styled(
             format!("── {label} ──"),
@@ -436,6 +465,7 @@ fn render_modal(frame: &mut ratatui::Frame, app: &App) {
                 Line::from("  Ctrl+L  Prompt list"),
                 Line::from("  Ctrl+F  Search"),
                 Line::from("  Ctrl+G  Generation settings"),
+                Line::from("  Ctrl+B  Branch history"),
                 Line::from("  /       Search (when input empty)"),
                 Line::from("  Ctrl+T  Test connection"),
                 Line::from("  Ctrl+M  Cycle model"),
@@ -912,6 +942,57 @@ fn render_modal(frame: &mut ratatui::Frame, app: &App) {
                 Span::raw("=cancel  (empty = provider default)"),
             ]);
             frame.render_widget(Paragraph::new(hint), chunks[4]);
+        }
+        Modal::BranchHistory { selected } => {
+            let height = (app.messages.len() + 4).min(20) as u16;
+            let area = centered_rect(60, height, frame.area());
+            let block = Block::default()
+                .title(" Branch History (Ctrl+B) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(area);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(block, area);
+
+            if app.messages.is_empty() {
+                let empty = Paragraph::new("  No messages in this conversation")
+                    .style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(empty, inner);
+            } else {
+                let items: Vec<ListItem> = app
+                    .messages
+                    .iter()
+                    .enumerate()
+                    .map(|(i, msg)| {
+                        let is_selected = i == *selected;
+                        let style = if is_selected {
+                            Style::default().fg(Color::Black).bg(Color::Cyan)
+                        } else {
+                            Style::default()
+                        };
+                        let role_label = match msg.role {
+                            Role::User => "you",
+                            Role::Assistant => "assistant",
+                            Role::System => "system",
+                            Role::Tool => "tool",
+                        };
+                        let branch_marker = if msg.parent_id.is_some() {
+                            "↩ "
+                        } else {
+                            "  "
+                        };
+                        let snippet = if msg.content.len() > 40 {
+                            format!("{}...", &msg.content[..37])
+                        } else {
+                            msg.content.clone()
+                        };
+                        let display = format!("{}{}: {}", branch_marker, role_label, snippet);
+                        ListItem::new(Line::from(Span::styled(display, style)))
+                    })
+                    .collect();
+                let list = List::new(items);
+                frame.render_widget(list, inner);
+            }
         }
     }
 }

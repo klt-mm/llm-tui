@@ -2,10 +2,12 @@ use async_trait::async_trait;
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::{Conversation, Message, Model, Prompt, Provider, ProviderProtocol, Role};
+use crate::domain::{
+    Conversation, GenerationRun, Message, Model, Prompt, Provider, ProviderProtocol, Role,
+};
 use crate::persistence::repositories::{
-    ConversationRepository, MessageRepository, MessageSearchResult, ModelRepository,
-    PromptRepository, PromptSearchResult, ProviderRepository,
+    ConversationRepository, GenerationRunRepository, MessageRepository, MessageSearchResult,
+    ModelRepository, PromptRepository, PromptSearchResult, ProviderRepository,
 };
 
 // ---------------------------------------------------------------------------
@@ -515,5 +517,86 @@ fn row_to_prompt(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Prompt> {
             .map(|dt| dt.with_timezone(&chrono::Utc))?,
         updated_at: chrono::DateTime::parse_from_rfc3339(&row.try_get::<String, _>("updated_at")?)
             .map(|dt| dt.with_timezone(&chrono::Utc))?,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Generation Run
+// ---------------------------------------------------------------------------
+
+pub struct SqliteGenerationRunRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteGenerationRunRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl GenerationRunRepository for SqliteGenerationRunRepository {
+    async fn create(&self, run: &GenerationRun) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO generation_runs (id, message_id, provider_id, model_id, started_at, \
+             completed_at, prompt_tokens, completion_tokens, total_tokens, prompt_ms, \
+             generation_ms, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(run.id.to_string())
+        .bind(run.message_id.to_string())
+        .bind(run.provider_id.to_string())
+        .bind(&run.model_id)
+        .bind(run.started_at.to_rfc3339())
+        .bind(run.completed_at.map(|t| t.to_rfc3339()))
+        .bind(run.prompt_tokens.map(|v| v as i64))
+        .bind(run.completion_tokens.map(|v| v as i64))
+        .bind(run.total_tokens.map(|v| v as i64))
+        .bind(run.prompt_ms)
+        .bind(run.generation_ms)
+        .bind(run.metadata.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_for_message(&self, message_id: Uuid) -> anyhow::Result<Vec<GenerationRun>> {
+        let rows =
+            sqlx::query("SELECT * FROM generation_runs WHERE message_id = ? ORDER BY started_at")
+                .bind(message_id.to_string())
+                .fetch_all(&self.pool)
+                .await?;
+        rows.iter().map(row_to_generation_run).collect()
+    }
+}
+
+fn row_to_generation_run(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<GenerationRun> {
+    let completed_at: Option<String> = row.try_get("completed_at")?;
+    let metadata_str: String = row.try_get("metadata_json")?;
+    let metadata: serde_json::Value =
+        serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({}));
+    Ok(GenerationRun {
+        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        message_id: Uuid::parse_str(&row.try_get::<String, _>("message_id")?)?,
+        provider_id: Uuid::parse_str(&row.try_get::<String, _>("provider_id")?)?,
+        model_id: row.try_get("model_id")?,
+        started_at: chrono::DateTime::parse_from_rfc3339(&row.try_get::<String, _>("started_at")?)
+            .map(|dt| dt.with_timezone(&chrono::Utc))?,
+        completed_at: completed_at
+            .map(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&chrono::Utc))
+            })
+            .transpose()?,
+        prompt_tokens: row
+            .try_get::<Option<i64>, _>("prompt_tokens")?
+            .map(|v| v as u64),
+        completion_tokens: row
+            .try_get::<Option<i64>, _>("completion_tokens")?
+            .map(|v| v as u64),
+        total_tokens: row
+            .try_get::<Option<i64>, _>("total_tokens")?
+            .map(|v| v as u64),
+        prompt_ms: row.try_get("prompt_ms")?,
+        generation_ms: row.try_get("generation_ms")?,
+        metadata,
     })
 }

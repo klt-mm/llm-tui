@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::domain::{Conversation, Message, Model, Prompt, Provider};
+use crate::domain::{Conversation, GenerationRun, Message, Model, Prompt, Provider};
 
 #[derive(Debug, Clone)]
 pub struct MessageSearchResult {
@@ -56,4 +56,10 @@ pub trait PromptRepository: Send + Sync {
 pub trait ProviderRepository: Send + Sync {
     async fn create(&self, provider: &Provider) -> anyhow::Result<()>;
     async fn list(&self) -> anyhow::Result<Vec<Provider>>;
+}
+
+#[async_trait]
+pub trait GenerationRunRepository: Send + Sync {
+    async fn create(&self, run: &GenerationRun) -> anyhow::Result<()>;
+    async fn list_for_message(&self, message_id: Uuid) -> anyhow::Result<Vec<GenerationRun>>;
 }

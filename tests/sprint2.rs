@@ -10,8 +10,8 @@ use llm_tui::events::{AppEvent, UserEvent};
 use llm_tui::llm::FakeProvider;
 use llm_tui::persistence::repositories::*;
 use llm_tui::persistence::{
-    Database, SqliteConversationRepository, SqliteMessageRepository, SqliteModelRepository,
-    SqlitePromptRepository, SqliteProviderRepository,
+    Database, SqliteConversationRepository, SqliteGenerationRunRepository, SqliteMessageRepository,
+    SqliteModelRepository, SqlitePromptRepository, SqliteProviderRepository,
 };
 
 async fn test_db() -> (Database, tempfile::TempDir) {
@@ -29,6 +29,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
     let model_repo = Arc::new(SqliteModelRepository::new(db.pool.clone()));
     let provider_repo = Arc::new(SqliteProviderRepository::new(db.pool.clone()));
     let prompt_repo = Arc::new(SqlitePromptRepository::new(db.pool.clone()));
+    let generation_run_repo = Arc::new(SqliteGenerationRunRepository::new(db.pool.clone()));
     App::new(
         provider,
         "fake".into(),
@@ -37,6 +38,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
         model_repo,
         provider_repo,
         prompt_repo,
+        generation_run_repo,
         GenerationConfig::default(),
         ContextConfig::default(),
         event_tx,
@@ -233,6 +235,7 @@ async fn generation_config_passed_to_chat_request() {
     let model_repo = Arc::new(SqliteModelRepository::new(db.pool.clone()));
     let provider_repo = Arc::new(SqliteProviderRepository::new(db.pool.clone()));
     let prompt_repo = Arc::new(SqlitePromptRepository::new(db.pool.clone()));
+    let generation_run_repo = Arc::new(SqliteGenerationRunRepository::new(db.pool.clone()));
 
     let gen_config = GenerationConfig {
         temperature: Some(0.7),
@@ -248,6 +251,7 @@ async fn generation_config_passed_to_chat_request() {
         model_repo,
         provider_repo,
         prompt_repo,
+        generation_run_repo,
         gen_config,
         ContextConfig::default(),
         event_tx.clone(),
