@@ -1,22 +1,27 @@
-# LLM-TUI
+# 🦀 LLM-TUI
 
 <div align="center">
 
 **A local-first, keyboard-driven terminal UI client for llama.cpp and OpenAI-compatible LLM endpoints**
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/klt-mm/llm-tui/releases)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-69+-brightgreen.svg)](https://github.com/klt-mm/llm-tui/actions)
-[![Rust](https://img.shields.io/badge/Rust-2024-orange.svg)](https://www.rust-lang.org/)
-[![Status](https://img.shields.io/badge/status-Production%20Ready-success.svg)](https://github.com/klt-mm/llm-tui)
+[![Version](https://img.shields.io/badge/version-1.0.2-f97316.svg?style=flat-square)](https://github.com/klt-mm/llm-tui/releases)
+[![License](https://img.shields.io/badge/license-MIT-10b981.svg?style=flat-square)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-91+-10b981.svg?style=flat-square)](https://github.com/klt-mm/llm-tui/actions)
+[![Rust](https://img.shields.io/badge/Rust-2024-f97316.svg?style=flat-square)](https://www.rust-lang.org/)
+[![Status](https://img.shields.io/badge/status-Production%20Ready-10b981.svg?style=flat-square)](https://github.com/klt-mm/llm-tui)
+[![Termux](https://img.shields.io/badge/Termux-Supported-f97316.svg?style=flat-square)](#android-termux)
 
-[Installation](#installation) • [Usage](#usage) • [Documentation](https://klt-mm.github.io/llm-tui) • [Contributing](#contributing)
+### 🚀 [Installation](#-installation) • 📖 [Usage](#-usage) • 📚 [Documentation](https://klt-mm.github.io/llm-tui) • 🤝 [Contributing](#-contributing)
 
 </div>
 
 ---
 
 ## ✨ Features
+
+<table>
+<tr>
+<td width="50%">
 
 ### 🚀 Local-First
 - Works seamlessly with llama.cpp and any OpenAI-compatible endpoint
@@ -38,6 +43,9 @@
 - Extensible tool system with custom tool support
 - Automatic tool execution and result handling
 
+</td>
+<td width="50%">
+
 ### 🖼️ Vision Support
 - Attach images to your messages
 - Works with vision-capable models (GPT-4V, etc.)
@@ -58,6 +66,10 @@
 - Edit as branch functionality
 - Visual branch indicators
 
+</td>
+</tr>
+</table>
+
 ### 🎯 Advanced Features
 - Prompt library with variables and tags
 - Generation settings (temperature, top_p, max_tokens)
@@ -67,13 +79,22 @@
 
 ## 📦 Installation
 
-### Quick Install (Recommended)
+<div align="center">
+
+### 🚀 Quick Install (Recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/klt-mm/llm-tui/main/install.sh | bash
 ```
 
-### Build from Source
+*The install script auto-detects your platform (Linux, macOS, Termux) and handles everything!*
+
+</div>
+
+### 🛠️ Build from Source
+
+<details>
+<summary><b>Click to expand build instructions</b></summary>
 
 ```bash
 # Clone the repository
@@ -88,9 +109,13 @@ cargo build --release
 sudo cp ./target/release/llm-tui /usr/local/bin/
 ```
 
-### Platform-Specific Instructions
+</details>
 
-#### Linux (Ubuntu/Debian)
+### 💻 Platform-Specific Instructions
+
+<details>
+<summary><b>🐧 Linux (Ubuntu/Debian)</b></summary>
+
 ```bash
 # Install dependencies
 sudo apt-get update
@@ -107,7 +132,11 @@ cargo build --release
 sudo cp ./target/release/llm-tui /usr/local/bin/
 ```
 
-#### macOS
+</details>
+
+<details>
+<summary><b>🍎 macOS</b></summary>
+
 ```bash
 # Install dependencies with Homebrew
 brew install rust sqlite
@@ -119,7 +148,10 @@ cargo build --release
 sudo cp ./target/release/llm-tui /usr/local/bin/
 ```
 
-#### Android (Termux)
+</details>
+
+<details>
+<summary><b>📱 Android (Termux)</b></summary>
 
 Termux is fully supported! The installation script automatically detects Termux and handles the installation appropriately.
 
@@ -162,7 +194,12 @@ rm -rf ~/.config/llm-tui
 rm -f ~/llm-tui.db
 ```
 
-### Uninstallation
+</details>
+
+### 🗑️ Uninstallation
+
+<details>
+<summary><b>Click to expand uninstall instructions</b></summary>
 
 ```bash
 # If installed via script
@@ -174,146 +211,21 @@ rm -rf ~/.config/llm-tui
 rm -f ~/llm-tui.db
 ```
 
+</details>
+
 ## 🚀 Quick Start
 
-1. **Launch LLM-TUI:**
-   ```bash
-   llm-tui
-   ```
+<div align="center">
 
-2. **Configure your provider** (create `~/.config/llm-tui/config.toml`):
-   ```toml
-   [provider]
-   base_url = "http://localhost:8080/v1"
-   api_key = "your-api-key-here"
+### 1️⃣ Launch LLM-TUI
 
-   [generation]
-   temperature = 0.7
-   top_p = 0.9
-   max_tokens = 2048
-
-   [context]
-   max_tokens = 4096
-   reserve_for_response = 1024
-   ```
-
-3. **Start chatting:**
-   - Press `Ctrl+N` to create a new conversation
-   - Type your message and press `Enter` to send
-   - The response will stream in real-time
-
-## ⌨️ Keyboard Shortcuts
-
-### Global Shortcuts
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+N` | New conversation |
-| `Ctrl+K` | Command palette |
-| `Ctrl+P` | Prompt picker |
-| `Ctrl+L` | Prompt list |
-| `Ctrl+F` | Search |
-| `Ctrl+G` | Generation settings |
-| `Ctrl+B` | Branch history |
-| `Ctrl+T` | Test connection |
-| `Ctrl+M` | Cycle model |
-| `Ctrl+R` | Retry generation |
-| `Alt+C` | Cancel generation |
-| `?` | Show help |
-| `Esc` | Quit / Close modal |
-
-### Sidebar Navigation
-| Shortcut | Action |
-|----------|--------|
-| `j` / `↓` | Navigate down |
-| `k` / `↑` | Navigate up |
-| `Enter` | Open conversation |
-| `r` | Rename conversation |
-| `d` | Delete conversation |
-| `n` | Prompts screen |
-| `1-9` | Select model |
-
-### Chat Input
-| Shortcut | Action |
-|----------|--------|
-| `Enter` | Send message |
-| `Tab` | Toggle focus to sidebar |
-| `/` | Open search (when input empty) |
-
-## 📖 Usage
-
-### Basic Workflow
-
-1. **Start a Conversation:** Press `Ctrl+N` or select from sidebar
-2. **Send a Message:** Type and press `Enter`
-3. **Cancel Generation:** Press `Alt+C`
-4. **Retry:** Press `Ctrl+R`
-
-### Advanced Features
-
-#### Command Palette
-Press `Ctrl+K` to open the command palette. Type to filter commands, then press `Enter` to execute.
-
-#### Prompt Management
-- `Ctrl+P` - Open prompt picker
-- `Ctrl+L` - Open prompt list
-- Create prompts with variables: `Write a {{language}} function that {{action}}`
-- Organize with tags for easy filtering
-
-#### Search
-Press `Ctrl+F` or `/` (when input is empty) to search across messages and prompts.
-
-#### Branching
-- `Ctrl+B` - Open branch history
-- Select a message and press `Enter` to edit as branch
-- Explore different conversation paths
-
-#### Tool Calling
-LLM-TUI includes built-in tools:
-- `shell` - Execute shell commands
-- `read_file` - Read file contents
-- `write_file` - Write to files
-- `list_directory` - List directory contents
-
-#### Vision Support
-Attach images to your messages:
-```
-/image /path/to/image.png
+```bash
+llm-tui
 ```
 
-#### Generation Settings
-Press `Ctrl+G` to adjust:
-- Temperature (0.0-2.0)
-- Top P (0.0-1.0)
-- Max Tokens
+### 2️⃣ Configure your provider
 
-## 🏗️ Architecture
-
-```
-TUI (ratatui)
-  ↓
-Application / Services (app.rs, events.rs)
-  ↓
-Domain (src/domain/)          ← must not import ratatui, sqlx, reqwest, or terminal APIs
-  ├── LLM Provider (src/llm/)
-  └── Repositories (src/persistence/)
-        ↓
-      SQLite + FTS5
-```
-
-### Key Modules
-- `src/domain/` — Pure domain types
-- `src/llm/` — Provider adapters (OpenAI-compatible)
-- `src/persistence/` — SQLite repositories and migrations
-- `src/events.rs` — Event-driven state transitions
-- `src/tui.rs` — Terminal UI rendering
-- `src/app.rs` — Application state and event dispatch
-- `src/context.rs` — Context engineering and token budgeting
-- `src/tools/` — Tool calling system
-- `src/image.rs` — Image loading and encoding
-
-## 🔧 Configuration
-
-Configuration file location: `~/.config/llm-tui/config.toml`
+Create `~/.config/llm-tui/config.toml`:
 
 ```toml
 [provider]
@@ -330,20 +242,276 @@ max_tokens = 4096
 reserve_for_response = 1024
 ```
 
-### Environment Variables
+### 3️⃣ Start chatting!
+
+- Press `Ctrl+N` to create a new conversation
+- Type your message and press `Enter` to send
+- The response will stream in real-time
+
+</div>
+
+## ⌨️ Keyboard Shortcuts
+
+<div align="center">
+
+### 🌐 Global Shortcuts
+
+| Shortcut | Action | | Shortcut | Action |
+|----------|--------|-|----------|--------|
+| `Ctrl+N` | New conversation | | `Ctrl+K` | Command palette |
+| `Ctrl+P` | Prompt picker | | `Ctrl+L` | Prompt list |
+| `Ctrl+F` | Search | | `Ctrl+G` | Generation settings |
+| `Ctrl+B` | Branch history | | `Ctrl+T` | Test connection |
+| `Ctrl+M` | Cycle model | | `Ctrl+R` | Retry generation |
+| `Alt+C` | Cancel generation | | `?` | Show help |
+| `Esc` | Quit / Close modal | | | |
+
+### 📂 Sidebar Navigation
+
+| Shortcut | Action | | Shortcut | Action |
+|----------|--------|-|----------|--------|
+| `j` / `↓` | Navigate down | | `k` / `↑` | Navigate up |
+| `Enter` | Open conversation | | `r` | Rename conversation |
+| `d` | Delete conversation | | `n` | Prompts screen |
+| `1-9` | Select model | | | |
+
+### 💬 Chat Input
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Tab` | Toggle focus to sidebar |
+| `/` | Open search (when input empty) |
+
+</div>
+
+## 📖 Usage
+
+### Basic Workflow
+
+<table>
+<tr>
+<td width="25%" align="center">
+
+**1️⃣ Start**
+
+`Ctrl+N` or select from sidebar
+
+</td>
+<td width="25%" align="center">
+
+**2️⃣ Send**
+
+Type and press `Enter`
+
+</td>
+<td width="25%" align="center">
+
+**3️⃣ Cancel**
+
+Press `Alt+C`
+
+</td>
+<td width="25%" align="center">
+
+**4️⃣ Retry**
+
+Press `Ctrl+R`
+
+</td>
+</tr>
+</table>
+
+### 🎯 Advanced Features
+
+<details>
+<summary><b>🎨 Command Palette</b></summary>
+
+Press `Ctrl+K` to open the command palette. Type to filter commands, then press `Enter` to execute.
+
+Available commands:
+- New Conversation
+- Search
+- Prompt Picker
+- Prompt List
+- Select Model
+- Select Provider
+- Generation Settings
+- Branch History
+- Test Connection
+- Keyboard Shortcuts
+- Quit
+
+</details>
+
+<details>
+<summary><b>📝 Prompt Management</b></summary>
+
+- `Ctrl+P` - Open prompt picker
+- `Ctrl+L` - Open prompt list
+- Create prompts with variables: `Write a {{language}} function that {{action}}`
+- Organize with tags for easy filtering
+
+</details>
+
+<details>
+<summary><b>🔍 Search</b></summary>
+
+Press `Ctrl+F` or `/` (when input is empty) to search across messages and prompts.
+
+</details>
+
+<details>
+<summary><b>🌿 Branching</b></summary>
+
+- `Ctrl+B` - Open branch history
+- Select a message and press `Enter` to edit as branch
+- Explore different conversation paths
+
+</details>
+
+<details>
+<summary><b>🔧 Tool Calling</b></summary>
+
+LLM-TUI includes built-in tools:
+- `shell` - Execute shell commands
+- `read_file` - Read file contents
+- `write_file` - Write to files
+- `list_directory` - List directory contents
+
+</details>
+
+<details>
+<summary><b>🖼️ Vision Support</b></summary>
+
+Attach images to your messages:
+```
+/image /path/to/image.png
+```
+
+</details>
+
+<details>
+<summary><b>⚙️ Generation Settings</b></summary>
+
+Press `Ctrl+G` to adjust:
+- Temperature (0.0-2.0)
+- Top P (0.0-1.0)
+- Max Tokens
+
+</details>
+
+## 🏗️ Architecture
+
+<div align="center">
+
+```
+┌─────────────────────────────────────┐
+│         TUI (ratatui)               │
+└─────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────┐
+│   Application / Services            │
+│      (app.rs, events.rs)            │
+└─────────────────────────────────────┘
+                  ↓
+┌─────────────────────────────────────┐
+│         Domain Layer                │
+│  (must not import infrastructure)   │
+├──────────────────┬──────────────────┤
+│  LLM Provider    │   Repositories   │
+│   (src/llm/)     │(src/persistence/)│
+└──────────────────┴──────────────────┘
+                  ↓
+┌─────────────────────────────────────┐
+│      SQLite + FTS5                  │
+└─────────────────────────────────────┘
+```
+
+</div>
+
+### 📦 Key Modules
+
+<table>
+<tr>
+<td width="50%">
+
+- `src/domain/` — Pure domain types
+- `src/llm/` — Provider adapters (OpenAI-compatible)
+- `src/persistence/` — SQLite repositories and migrations
+- `src/events.rs` — Event-driven state transitions
+- `src/tui.rs` — Terminal UI rendering
+
+</td>
+<td width="50%">
+
+- `src/app.rs` — Application state and event dispatch
+- `src/context.rs` — Context engineering and token budgeting
+- `src/tools/` — Tool calling system
+- `src/image.rs` — Image loading and encoding
+- `src/config.rs` — Configuration management
+
+</td>
+</tr>
+</table>
+
+## 🔧 Configuration
+
+<div align="center">
+
+**Configuration file location:** `~/.config/llm-tui/config.toml`
+
+</div>
+
+```toml
+[provider]
+base_url = "http://localhost:8080/v1"
+api_key = "your-api-key-here"
+
+[generation]
+temperature = 0.7
+top_p = 0.9
+max_tokens = 2048
+
+[context]
+max_tokens = 4096
+reserve_for_response = 1024
+```
+
+### 🌍 Environment Variables
+
+<table>
+<tr>
+<td width="50%">
+
 - `LLM_TUI_BASE_URL` - Provider base URL
 - `LLM_TUI_API_KEY` - API key
+
+</td>
+<td width="50%">
+
+- `LLM_TUI_DATABASE_URL` - Database path
+- `RUST_LOG` - Log level
+
+</td>
+</tr>
+</table>
 - `LLM_TUI_DATABASE_URL` - Database path (default: ./llm-tui.db)
 - `RUST_LOG` - Log level (default: llm_tui=info)
 
 ## 🛠️ Development
 
-### Prerequisites
+### 📋 Prerequisites
+
 - Rust 2024 edition or later
 - Git
 - SQLite development libraries
 
-### Setup
+### 🚀 Setup
+
+<details>
+<summary><b>Click to expand setup instructions</b></summary>
+
 ```bash
 # Clone the repository
 git clone https://github.com/klt-mm/llm-tui.git
@@ -359,7 +527,13 @@ cargo test
 cargo run
 ```
 
-### Development Workflow
+</details>
+
+### 💻 Development Workflow
+
+<details>
+<summary><b>Click to expand workflow commands</b></summary>
+
 ```bash
 # Watch for changes and rebuild
 cargo watch -x check
@@ -373,7 +547,13 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-### Testing
+</details>
+
+### 🧪 Testing
+
+<details>
+<summary><b>Click to expand testing commands</b></summary>
+
 ```bash
 # Run all tests
 cargo test
@@ -385,41 +565,132 @@ cargo test --test phase6
 cargo test -- --nocapture
 ```
 
+</details>
+
 ## 📊 Project Status
 
-**Current Status:** Production Ready ✅
+<div align="center">
 
-All core phases (0-6) are complete:
-- ✅ Phase 0: Architecture foundation
-- ✅ Phase 1: llama.cpp chat
-- ✅ Phase 2: Core UX
-- ✅ Phase 3: Prompt and search
-- ✅ Phase 4: Context engineering
-- ✅ Phase 5: Branching and diagnostics
-- ✅ Phase 6: Advanced provider capabilities
+### ✅ Production Ready
 
-**Test Coverage:** 69+ tests passing
+**All core phases (0-6) are complete!**
+
+<table>
+<tr>
+<td width="33%" align="center">
+
+**Phase 0** ✅  
+Architecture foundation
+
+</td>
+<td width="33%" align="center">
+
+**Phase 1** ✅  
+llama.cpp chat
+
+</td>
+<td width="33%" align="center">
+
+**Phase 2** ✅  
+Core UX
+
+</td>
+</tr>
+<tr>
+<td width="33%" align="center">
+
+**Phase 3** ✅  
+Prompt and search
+
+</td>
+<td width="33%" align="center">
+
+**Phase 4** ✅  
+Context engineering
+
+</td>
+<td width="33%" align="center">
+
+**Phase 5** ✅  
+Branching and diagnostics
+
+</td>
+</tr>
+<tr>
+<td colspan="3" align="center">
+
+**Phase 6** ✅  
+Advanced provider capabilities
+
+</td>
+</tr>
+</table>
+
+**Test Coverage:** 91+ tests passing  
 **Quality Gates:** All passing (cargo test, clippy, fmt)
+
+</div>
 
 ## 📚 Documentation
 
-- [Website](https://klt-mm.github.io/llm-tui) - Full documentation
-- [Installation Guide](https://klt-mm.github.io/llm-tui/installation.html)
-- [Usage Guide](https://klt-mm.github.io/llm-tui/usage.html)
-- [Contributing Guide](https://klt-mm.github.io/llm-tui/contributing.html)
-- [Resources](https://klt-mm.github.io/llm-tui/resources.html)
-- [Design Docs](docs/) - Architecture and design documents
+<div align="center">
+
+| Resource | Link |
+|----------|------|
+| 🌐 **Website** | [klt-mm.github.io/llm-tui](https://klt-mm.github.io/llm-tui) |
+| 📦 **Installation Guide** | [Installation](https://klt-mm.github.io/llm-tui/installation.html) |
+| 📖 **Usage Guide** | [Usage](https://klt-mm.github.io/llm-tui/usage.html) |
+| 🤝 **Contributing Guide** | [Contributing](https://klt-mm.github.io/llm-tui/contributing.html) |
+| 📚 **Resources** | [Resources](https://klt-mm.github.io/llm-tui/resources.html) |
+| 🏗️ **Design Docs** | [docs/](docs/) |
+
+</div>
 
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](https://klt-mm.github.io/llm-tui/contributing.html) for details.
 
-### Quick Start for Contributors
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Ensure all tests pass
-5. Submit a pull request
+### 🚀 Quick Start for Contributors
+
+<table>
+<tr>
+<td width="20%" align="center">
+
+**1️⃣ Fork**
+
+Fork the repository
+
+</td>
+<td width="20%" align="center">
+
+**2️⃣ Branch**
+
+Create feature branch
+
+</td>
+<td width="20%" align="center">
+
+**3️⃣ Code**
+
+Make your changes
+
+</td>
+<td width="20%" align="center">
+
+**4️⃣ Test**
+
+Ensure tests pass
+
+</td>
+<td width="20%" align="center">
+
+**5️⃣ PR**
+
+Submit pull request
+
+</td>
+</tr>
+</table>
 
 ## 🔒 Security
 
@@ -431,27 +702,53 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
+<table>
+<tr>
+<td width="50%">
+
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - Efficient LLM inference
 - [ratatui](https://github.com/ratatui/ratatui) - Terminal UI framework
+
+</td>
+<td width="50%">
+
 - [sqlx](https://github.com/launchbadge/sqlx) - Rust SQL toolkit
 - [OpenAI](https://openai.com/) - API compatibility
 
+</td>
+</tr>
+</table>
+
 ## 📞 Support
 
-- [GitHub Issues](https://github.com/klt-mm/llm-tui/issues) - Report bugs and request features
-- [GitHub Discussions](https://github.com/klt-mm/llm-tui/discussions) - Ask questions and share ideas
-- [Documentation](https://klt-mm.github.io/llm-tui) - Full documentation
+<div align="center">
+
+| Channel | Link |
+|---------|------|
+| 🐛 **Report Bugs** | [GitHub Issues](https://github.com/klt-mm/llm-tui/issues) |
+| 💬 **Discussions** | [GitHub Discussions](https://github.com/klt-mm/llm-tui/discussions) |
+| 📚 **Documentation** | [Full Documentation](https://klt-mm.github.io/llm-tui) |
+
+</div>
 
 ## 🌟 Star History
 
+<div align="center">
+
 If you find LLM-TUI useful, consider giving it a star on GitHub!
+
+⭐ **[Star this repository](https://github.com/klt-mm/llm-tui)** ⭐
+
+</div>
 
 ---
 
 <div align="center">
 
-**Built with ❤️ using Rust**
+### 🦀 Built with ❤️ using Rust
 
-[Website](https://klt-mm.github.io/llm-tui) • [GitHub](https://github.com/klt-mm/llm-tui) • [Documentation](https://klt-mm.github.io/llm-tui)
+**[🌐 Website](https://klt-mm.github.io/llm-tui)** • **[💻 GitHub](https://github.com/klt-mm/llm-tui)** • **[📚 Documentation](https://klt-mm.github.io/llm-tui)**
+
+*LLM-TUI v1.0.2 - Production Ready*
 
 </div>
