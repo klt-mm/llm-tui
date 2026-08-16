@@ -2,9 +2,10 @@ use async_trait::async_trait;
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-use crate::domain::{Conversation, Message, Prompt, Provider, ProviderProtocol, Role};
+use crate::domain::{Conversation, Message, Model, Prompt, Provider, ProviderProtocol, Role};
 use crate::persistence::repositories::{
-    ConversationRepository, MessageRepository, PromptRepository, ProviderRepository,
+    ConversationRepository, MessageRepository, ModelRepository, PromptRepository,
+    ProviderRepository,
 };
 
 // ---------------------------------------------------------------------------
@@ -234,6 +235,72 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Message> {
         metadata,
         created_at: chrono::DateTime::parse_from_rfc3339(&row.try_get::<String, _>("created_at")?)
             .map(|dt| dt.with_timezone(&chrono::Utc))?,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
+
+pub struct SqliteModelRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteModelRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl ModelRepository for SqliteModelRepository {
+    async fn upsert(&self, provider_id: Uuid, models: &[Model]) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        for model in models {
+            sqlx::query(
+                "INSERT INTO models (provider_id, model_id, display_name, context_length, metadata_json, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(provider_id, model_id) DO UPDATE SET
+                   display_name = excluded.display_name,
+                   context_length = excluded.context_length,
+                   metadata_json = excluded.metadata_json,
+                   updated_at = excluded.updated_at",
+            )
+            .bind(provider_id.to_string())
+            .bind(&model.id)
+            .bind(&model.display_name)
+            .bind(model.context_length.map(|v| v as i64))
+            .bind(model.metadata.to_string())
+            .bind(&now)
+            .bind(&now)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn list_for_provider(&self, provider_id: Uuid) -> anyhow::Result<Vec<Model>> {
+        let rows = sqlx::query(
+            "SELECT * FROM models WHERE provider_id = ? ORDER BY model_id",
+        )
+        .bind(provider_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter().map(row_to_model).collect()
+    }
+}
+
+fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Model> {
+    let metadata_str: String = row.try_get("metadata_json")?;
+    let metadata: serde_json::Value =
+        serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({}));
+    let context_length: Option<i64> = row.try_get("context_length")?;
+    Ok(Model {
+        id: row.try_get("model_id")?,
+        display_name: row.try_get("display_name")?,
+        context_length: context_length.map(|v| v as u64),
+        metadata,
     })
 }
 

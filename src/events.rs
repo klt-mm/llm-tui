@@ -10,6 +10,8 @@ pub enum UserEvent {
     NewConversation,
     CancelGeneration,
     Retry,
+    TestConnection,
+    SelectModel(usize),
     OpenCommandPalette,
 }
 

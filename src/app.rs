@@ -6,19 +6,28 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::domain::{Conversation, GenerationParameters, Message, Model, Provider, ProviderProtocol, Role};
+use crate::config::GenerationConfig;
+use crate::domain::{
+    Conversation, GenerationParameters, GenerationUsage, Message, Model, Provider,
+    ProviderProtocol, Role,
+};
 use crate::events::{AppEvent, ProviderEvent, UserEvent};
 use crate::llm::provider::{ChatRequest, LlmProvider, StreamEvent};
-use crate::persistence::repositories::{ConversationRepository, MessageRepository, ProviderRepository};
+use crate::persistence::repositories::{
+    ConversationRepository, MessageRepository, ModelRepository, ProviderRepository,
+};
 
 pub struct StreamingState {
     pub message_id: Uuid,
     pub buffer: String,
     pub cancel: CancellationToken,
+    pub started_at: std::time::Instant,
+    pub usage: Option<GenerationUsage>,
 }
 
 pub struct App {
     pub provider: Arc<dyn LlmProvider>,
+    pub provider_name: String,
     pub models: Vec<Model>,
     pub selected_model: Option<String>,
     pub conversations: Vec<Conversation>,
@@ -28,9 +37,11 @@ pub struct App {
     pub input: String,
     pub should_quit: bool,
     pub error: Option<String>,
+    pub generation: GenerationConfig,
     provider_id: Uuid,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
+    model_repo: Arc<dyn ModelRepository>,
     provider_repo: Arc<dyn ProviderRepository>,
     event_tx: mpsc::Sender<AppEvent>,
 }
@@ -38,13 +49,17 @@ pub struct App {
 impl App {
     pub fn new(
         provider: Arc<dyn LlmProvider>,
+        provider_name: String,
         conversation_repo: Arc<dyn ConversationRepository>,
         message_repo: Arc<dyn MessageRepository>,
+        model_repo: Arc<dyn ModelRepository>,
         provider_repo: Arc<dyn ProviderRepository>,
+        generation: GenerationConfig,
         event_tx: mpsc::Sender<AppEvent>,
     ) -> Self {
         Self {
             provider,
+            provider_name,
             models: Vec::new(),
             selected_model: None,
             conversations: Vec::new(),
@@ -54,9 +69,11 @@ impl App {
             input: String::new(),
             should_quit: false,
             error: None,
+            generation,
             provider_id: Uuid::nil(),
             conversation_repo,
             message_repo,
+            model_repo,
             provider_repo,
             event_tx,
         }
@@ -73,7 +90,7 @@ impl App {
         } else {
             let provider = Provider {
                 id: Uuid::new_v4(),
-                name: "default".into(),
+                name: self.provider_name.clone(),
                 base_url: "fake://local".into(),
                 protocol: ProviderProtocol::OpenAiCompatible,
                 api_key_ref: None,
@@ -87,19 +104,7 @@ impl App {
             self.provider_id = provider.id;
         }
 
-        match self.provider.models().await {
-            Ok(models) => {
-                debug!(count = models.len(), "loaded models");
-                self.models = models;
-                if let Some(first) = self.models.first() {
-                    self.selected_model = Some(first.id.clone());
-                }
-            }
-            Err(e) => {
-                warn!(%e, "failed to load models");
-                self.error = Some(format!("Failed to load models: {e}"));
-            }
-        }
+        self.refresh_models().await;
 
         match self.conversation_repo.list().await {
             Ok(conversations) => self.conversations = conversations,
@@ -107,6 +112,53 @@ impl App {
                 warn!(%e, "failed to list conversations");
                 self.error = Some(format!("Failed to load conversations: {e}"));
             }
+        }
+    }
+
+    pub async fn refresh_models(&mut self) {
+        match self.provider.models().await {
+            Ok(models) => {
+                debug!(count = models.len(), "loaded models");
+                let _ = self.model_repo.upsert(self.provider_id, &models).await;
+                self.models = models;
+                if let Some(first) = self.models.first() {
+                    self.selected_model = Some(first.id.clone());
+                }
+            }
+            Err(e) => {
+                warn!(%e, "failed to load models");
+                if let Ok(cached) = self.model_repo.list_for_provider(self.provider_id).await {
+                    if !cached.is_empty() {
+                        self.models = cached;
+                        if let Some(first) = self.models.first() {
+                            self.selected_model = Some(first.id.clone());
+                        }
+                        return;
+                    }
+                }
+                self.error = Some(format!("Failed to load models: {e}"));
+            }
+        }
+    }
+
+    pub async fn test_connection(&mut self) {
+        self.error = None;
+        match self.provider.models().await {
+            Ok(models) => {
+                debug!(count = models.len(), "connection test succeeded");
+                let _ = self.model_repo.upsert(self.provider_id, &models).await;
+                self.models = models;
+            }
+            Err(e) => {
+                self.error = Some(format!("Connection failed: {e}"));
+            }
+        }
+    }
+
+    pub fn select_model(&mut self, model_id: String) {
+        if self.models.iter().any(|m| m.id == model_id) {
+            self.selected_model = Some(model_id);
+            debug!(model = %self.selected_model.as_ref().unwrap(), "model selected");
         }
     }
 
@@ -140,6 +192,24 @@ impl App {
             UserEvent::Retry => {
                 self.retry_generation().await;
             }
+            UserEvent::TestConnection => {
+                self.test_connection().await;
+            }
+            UserEvent::SelectModel(idx) => {
+                if idx == usize::MAX {
+                    // Cycle to next model
+                    if !self.models.is_empty() {
+                        let current = self.selected_model.as_deref().unwrap_or("");
+                        let pos = self.models.iter().position(|m| m.id == current).unwrap_or(0);
+                        let next = (pos + 1) % self.models.len();
+                        let model_id = self.models[next].id.clone();
+                        self.select_model(model_id);
+                    }
+                } else if let Some(model) = self.models.get(idx) {
+                    let model_id = model.id.clone();
+                    self.select_model(model_id);
+                }
+            }
             UserEvent::OpenCommandPalette => {
                 debug!("command palette requested (not yet implemented)");
             }
@@ -154,6 +224,8 @@ impl App {
                     message_id,
                     buffer: String::new(),
                     cancel: CancellationToken::new(),
+                    started_at: std::time::Instant::now(),
+                    usage: None,
                 });
             }
             ProviderEvent::Delta { message_id, text } => {
@@ -164,7 +236,13 @@ impl App {
                 }
             }
             ProviderEvent::ReasoningDelta { .. } => {}
-            ProviderEvent::Usage { .. } => {}
+            ProviderEvent::Usage { message_id, usage } => {
+                if let Some(ref mut state) = self.streaming {
+                    if state.message_id == message_id {
+                        state.usage = Some(usage);
+                    }
+                }
+            }
             ProviderEvent::Completed { message } => {
                 debug!(message_id = %message.id, "generation completed");
                 if let Err(e) = self.message_repo.create(&message).await {
@@ -225,6 +303,15 @@ impl App {
         self.start_generation(conversation_id).await;
     }
 
+    fn build_generation_params(&self) -> GenerationParameters {
+        GenerationParameters {
+            temperature: self.generation.temperature,
+            top_p: self.generation.top_p,
+            max_tokens: self.generation.max_tokens,
+            stop: Vec::new(),
+        }
+    }
+
     async fn start_generation(&mut self, conversation_id: Uuid) {
         let model = match &self.selected_model {
             Some(m) => m.clone(),
@@ -237,7 +324,7 @@ impl App {
         let request = ChatRequest {
             model,
             messages: self.messages.clone(),
-            generation: GenerationParameters::default(),
+            generation: self.build_generation_params(),
         };
 
         let cancel = CancellationToken::new();
@@ -247,6 +334,8 @@ impl App {
             message_id: assistant_message_id,
             buffer: String::new(),
             cancel: cancel.clone(),
+            started_at: std::time::Instant::now(),
+            usage: None,
         });
 
         let provider = Arc::clone(&self.provider);
@@ -416,5 +505,15 @@ impl App {
 
     pub fn streaming_content(&self) -> Option<&str> {
         self.streaming.as_ref().map(|s| s.buffer.as_str())
+    }
+
+    pub fn streaming_stats(&self) -> Option<(usize, f64)> {
+        self.streaming.as_ref().map(|s| {
+            let elapsed = s.started_at.elapsed().as_secs_f64();
+            let tokens = s.usage.as_ref()
+                .and_then(|u| u.completion_tokens)
+                .unwrap_or(0) as usize;
+            (tokens, elapsed)
+        })
     }
 }

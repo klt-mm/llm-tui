@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::domain::{Conversation, Message, Prompt, Provider};
+use crate::domain::{Conversation, Message, Model, Prompt, Provider};
 
 #[async_trait]
 pub trait ConversationRepository {
@@ -19,6 +19,12 @@ pub trait ConversationRepository {
 pub trait MessageRepository {
     async fn create(&self, message: &Message) -> anyhow::Result<()>;
     async fn list_for_conversation(&self, conversation_id: Uuid) -> anyhow::Result<Vec<Message>>;
+}
+
+#[async_trait]
+pub trait ModelRepository {
+    async fn upsert(&self, provider_id: Uuid, models: &[Model]) -> anyhow::Result<()>;
+    async fn list_for_provider(&self, provider_id: Uuid) -> anyhow::Result<Vec<Model>>;
 }
 
 #[async_trait]

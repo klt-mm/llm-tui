@@ -7,8 +7,10 @@ use llm_tui::domain::Role;
 use llm_tui::events::{AppEvent, UserEvent};
 use llm_tui::llm::FakeProvider;
 use llm_tui::persistence::repositories::*;
+use llm_tui::config::GenerationConfig;
 use llm_tui::persistence::{
-    Database, SqliteConversationRepository, SqliteMessageRepository, SqliteProviderRepository,
+    Database, SqliteConversationRepository, SqliteMessageRepository, SqliteModelRepository,
+    SqliteProviderRepository,
 };
 
 async fn test_db() -> (Database, tempfile::TempDir) {
@@ -26,8 +28,18 @@ fn make_app(
     let provider = Arc::new(FakeProvider::new());
     let conv_repo = Arc::new(SqliteConversationRepository::new(db.pool.clone()));
     let msg_repo = Arc::new(SqliteMessageRepository::new(db.pool.clone()));
+    let model_repo = Arc::new(SqliteModelRepository::new(db.pool.clone()));
     let provider_repo = Arc::new(SqliteProviderRepository::new(db.pool.clone()));
-    App::new(provider, conv_repo, msg_repo, provider_repo, event_tx)
+    App::new(
+        provider,
+        "fake".into(),
+        conv_repo,
+        msg_repo,
+        model_repo,
+        provider_repo,
+        GenerationConfig::default(),
+        event_tx,
+    )
 }
 
 #[tokio::test]

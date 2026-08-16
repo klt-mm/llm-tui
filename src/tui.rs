@@ -52,6 +52,16 @@ pub async fn run(app: &mut App) -> Result<()> {
                         KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             Some(UserEvent::Retry)
                         }
+                        KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(UserEvent::TestConnection)
+                        }
+                        KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(UserEvent::SelectModel(usize::MAX))
+                        }
+                        KeyCode::Char(c @ '1'..='9') => {
+                            let idx = (c as usize) - ('1' as usize);
+                            Some(UserEvent::SelectModel(idx))
+                        }
                         KeyCode::Char(c) => Some(UserEvent::InputChar(c)),
                         KeyCode::Backspace => Some(UserEvent::Backspace),
                         _ => None,
@@ -104,26 +114,41 @@ fn render(frame: &mut ratatui::Frame, app: &App) {
 }
 
 fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
-    let model = app
-        .selected_model
-        .as_deref()
-        .unwrap_or("—");
-    let status = if app.streaming.is_some() {
-        " [streaming...]"
+    let model = app.selected_model.as_deref().unwrap_or("—");
+
+    let streaming_info = if let Some(stats) = app.streaming_stats() {
+        let (tokens, elapsed) = stats;
+        let tps = if elapsed > 0.0 {
+            format!("{:.1} tok/s", tokens as f64 / elapsed)
+        } else {
+            "streaming...".into()
+        };
+        format!(" | {tps}")
     } else {
-        ""
+        String::new()
     };
+
     let error = app
         .error
         .as_ref()
-        .map(|e| format!(" | ERR: {e}"))
+        .map(|e| {
+            let msg = if e.len() > 40 { &e[..40] } else { e };
+            format!(" | ERR: {msg}")
+        })
         .unwrap_or_default();
 
     let line = Line::from(vec![
-        Span::styled(" llm-tui ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " llm-tui ",
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ),
         Span::raw("| "),
-        Span::raw(format!("model: {model}{status}")),
-        Span::raw(error),
+        Span::styled(
+            format!("{} ", &app.provider_name),
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::raw(format!("| {model}{streaming_info}")),
+        Span::styled(error, Style::default().fg(Color::Red)),
     ]);
 
     frame.render_widget(Paragraph::new(line), area);
@@ -184,8 +209,21 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
 }
 
 fn render_input(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    let model_list: String = app
+        .models
+        .iter()
+        .enumerate()
+        .map(|(i, m)| format!("[{}]={}", i + 1, m.id))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let help = format!(
+        " Enter=send | Ctrl+N=new | Ctrl+T=test | Ctrl+M=cycle model | 1-9=pick | Alt+C=cancel | Ctrl+R=retry | Esc=quit | {} ",
+        model_list
+    );
+
     let input = Paragraph::new(app.input.as_str())
-        .block(Block::default().title(" Input (Enter=send, Ctrl+N=new, Alt+C=cancel, Esc=quit) ").borders(Borders::ALL))
+        .block(Block::default().title(help).borders(Borders::ALL))
         .style(Style::default().fg(Color::White));
     frame.render_widget(input, area);
 }
