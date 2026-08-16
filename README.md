@@ -120,15 +120,46 @@ sudo cp ./target/release/llm-tui /usr/local/bin/
 ```
 
 #### Android (Termux)
+
+Termux is fully supported! The installation script automatically detects Termux and handles the installation appropriately.
+
+**Quick Install (Recommended):**
+```bash
+# The install script auto-detects Termux
+curl -fsSL https://raw.githubusercontent.com/klt-mm/llm-tui/main/install.sh | bash
+```
+
+**Manual Installation:**
 ```bash
 # Install dependencies
-pkg install rust git sqlite
+pkg update
+pkg install rust git sqlite openssl
 
-# Build and install
+# Clone and build
 git clone https://github.com/klt-mm/llm-tui.git
 cd llm-tui
 cargo build --release
+
+# Install to Termux bin directory
 cp ./target/release/llm-tui $PREFIX/bin/
+```
+
+**Termux-Specific Notes:**
+- No `sudo` required - Termux runs in user space
+- Binary installs to `$PREFIX/bin` (automatically in PATH)
+- Configuration stored in `~/.config/llm-tui/`
+- Database stored in `~/llm-tui.db` by default
+- Full feature support including tool calling and vision
+
+**Uninstall on Termux:**
+```bash
+# Using uninstall script (auto-detects Termux)
+curl -fsSL https://raw.githubusercontent.com/klt-mm/llm-tui/main/uninstall.sh | bash
+
+# Or manually
+rm $PREFIX/bin/llm-tui
+rm -rf ~/.config/llm-tui
+rm -f ~/llm-tui.db
 ```
 
 ### Uninstallation

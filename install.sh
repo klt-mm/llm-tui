@@ -42,7 +42,10 @@ command_exists() {
 
 # Detect OS
 detect_os() {
-    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Check for Termux first
+    if [[ -d "/data/data/com.termux" ]] || [[ "$OSTYPE" == *"android"* ]]; then
+        echo "termux"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         echo "linux"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
         echo "macos"
@@ -75,6 +78,13 @@ install_dependencies() {
     info "Installing dependencies for $os..."
     
     case "$os" in
+        termux)
+            # Termux uses pkg package manager, no sudo needed
+            info "Detected Termux environment"
+            pkg update -y
+            pkg install -y rust git sqlite openssl
+            success "Termux dependencies installed"
+            ;;
         linux)
             if command_exists apt-get; then
                 sudo apt-get update
@@ -103,6 +113,18 @@ install_dependencies() {
 
 # Install Rust if not present
 install_rust() {
+    local os=$1
+    
+    # Skip Rust installation on Termux (installed via pkg)
+    if [[ "$os" == "termux" ]]; then
+        if command_exists rustc; then
+            info "Rust is already installed: $(rustc --version)"
+        else
+            error "Rust not found. Please install via: pkg install rust"
+        fi
+        return
+    fi
+    
     if ! command_exists rustc; then
         info "Rust not found. Installing Rust..."
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -138,10 +160,18 @@ build_from_source() {
 # Install binary
 install_binary() {
     local binary_path=$1
+    local os=$2
+    
+    # Determine install directory based on OS
+    if [[ "$os" == "termux" ]]; then
+        INSTALL_DIR="$PREFIX/bin"
+    else
+        INSTALL_DIR="/usr/local/bin"
+    fi
     
     info "Installing $BINARY_NAME to $INSTALL_DIR..."
     
-    if [[ ! -w "$INSTALL_DIR" ]]; then
+    if [[ "$os" != "termux" ]] && [[ ! -w "$INSTALL_DIR" ]]; then
         sudo mkdir -p "$INSTALL_DIR"
         sudo cp "$binary_path" "$INSTALL_DIR/$BINARY_NAME"
         sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
@@ -211,17 +241,17 @@ main() {
     
     # Install dependencies
     install_dependencies "$os"
-    
+
     # Install Rust
-    install_rust
-    
+    install_rust "$os"
+
     # Build from source
     local binary_path
     binary_path=$(build_from_source)
     local temp_dir=$(dirname $(dirname $(dirname "$binary_path")))
-    
+
     # Install binary
-    install_binary "$binary_path"
+    install_binary "$binary_path" "$os"
     
     # Create config directory
     create_config_dir

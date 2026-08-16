@@ -6,7 +6,6 @@ set -e
 # Repository: https://github.com/klt-mm/llm-tui
 
 BINARY_NAME="llm-tui"
-INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="$HOME/.config/llm-tui"
 DATA_DIR="$HOME"
 
@@ -35,15 +34,46 @@ error() {
     exit 1
 }
 
+# Detect OS
+detect_os() {
+    # Check for Termux first
+    if [[ -d "/data/data/com.termux" ]] || [[ "$OSTYPE" == *"android"* ]]; then
+        echo "termux"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "macos"
+    elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        echo "windows"
+    else
+        echo "unknown"
+    fi
+}
+
+# Get install directory based on OS
+get_install_dir() {
+    local os=$1
+    if [[ "$os" == "termux" ]]; then
+        echo "$PREFIX/bin"
+    else
+        echo "/usr/local/bin"
+    fi
+}
+
 # Confirm uninstallation
 confirm() {
+    local os=$1
+    local install_dir=$(get_install_dir "$os")
+    
     echo ""
     echo "╔════════════════════════════════════════╗"
     echo "║   LLM-TUI Uninstallation Script        ║"
     echo "╚════════════════════════════════════════╝"
     echo ""
+    echo "Detected OS: $os"
+    echo ""
     echo "This will remove:"
-    echo "  - Binary: $INSTALL_DIR/$BINARY_NAME"
+    echo "  - Binary: $install_dir/$BINARY_NAME"
     echo "  - Configuration: $CONFIG_DIR"
     echo "  - Database files: $DATA_DIR/llm-tui.db"
     echo ""
@@ -57,11 +87,13 @@ confirm() {
 
 # Remove binary
 remove_binary() {
-    local binary_path="$INSTALL_DIR/$BINARY_NAME"
-    
+    local os=$1
+    local install_dir=$(get_install_dir "$os")
+    local binary_path="$install_dir/$BINARY_NAME"
+
     if [[ -f "$binary_path" ]]; then
         info "Removing binary from $binary_path..."
-        if [[ ! -w "$INSTALL_DIR" ]]; then
+        if [[ "$os" != "termux" ]] && [[ ! -w "$install_dir" ]]; then
             sudo rm -f "$binary_path"
         else
             rm -f "$binary_path"
@@ -121,24 +153,26 @@ remove_from_path() {
 
 # Main uninstallation function
 main() {
-    confirm
+    local os=$(detect_os)
     
+    confirm "$os"
+
     echo ""
     info "Starting uninstallation..."
     echo ""
-    
+
     # Remove binary
-    remove_binary
-    
+    remove_binary "$os"
+
     # Remove from custom locations
     remove_from_path
-    
+
     # Remove configuration
     remove_config
-    
+
     # Remove database
     remove_database
-    
+
     echo ""
     success "╔════════════════════════════════════════╗"
     success "║   Uninstallation Complete!             ║"
