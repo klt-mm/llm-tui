@@ -1,0 +1,30 @@
+{
+  "html": {
+    "command": "vscode-html-language-server",
+    "args": ["--stdio"]
+  },
+  "css": {
+    "command": "vscode-css-language-server",
+    "args": ["--stdio"]
+  },
+  "json": {
+    "command": "vscode-json-language-server",
+    "args": ["--stdio"]
+  },
+  "yaml": {
+    "command": "yaml-language-server",
+    "args": ["--stdio"]
+  },
+  "python": {
+    "command": "pyright-langserver",
+    "args": ["--stdio"]
+  },
+  "dockerfile": {
+    "command": "docker-langserver",
+    "args": ["--stdio"]
+  },
+  "bash": {
+    "command": "/data/data/com.termux/files/usr/bin/bash-language-server",
+    "args": ["start"]
+  }
+}
