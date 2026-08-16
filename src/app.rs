@@ -38,6 +38,8 @@ pub struct App {
     pub should_quit: bool,
     pub error: Option<String>,
     pub generation: GenerationConfig,
+    pub sidebar_focus: bool,
+    pub sidebar_selection: usize,
     provider_id: Uuid,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
@@ -70,6 +72,8 @@ impl App {
             should_quit: false,
             error: None,
             generation,
+            sidebar_focus: false,
+            sidebar_selection: 0,
             provider_id: Uuid::nil(),
             conversation_repo,
             message_repo,
@@ -175,13 +179,37 @@ impl App {
                 self.should_quit = true;
             }
             UserEvent::InputChar(c) => {
-                self.input.push(c);
+                if self.sidebar_focus {
+                    match c {
+                        'j' => {
+                            if !self.conversations.is_empty() {
+                                let max = self.conversations.len().saturating_sub(1);
+                                self.sidebar_selection = (self.sidebar_selection + 1).min(max);
+                            }
+                        }
+                        'k' => {
+                            self.sidebar_selection = self.sidebar_selection.saturating_sub(1);
+                        }
+                        'q' => {
+                            self.should_quit = true;
+                        }
+                        _ => {}
+                    }
+                } else {
+                    self.input.push(c);
+                }
             }
             UserEvent::Backspace => {
-                self.input.pop();
+                if !self.sidebar_focus {
+                    self.input.pop();
+                }
             }
             UserEvent::SendMessage => {
-                self.send_message().await;
+                if self.sidebar_focus {
+                    self.open_selected_conversation().await;
+                } else {
+                    self.send_message().await;
+                }
             }
             UserEvent::NewConversation => {
                 self.new_conversation().await;
@@ -212,6 +240,32 @@ impl App {
             }
             UserEvent::OpenCommandPalette => {
                 debug!("command palette requested (not yet implemented)");
+            }
+            UserEvent::NavigateUp => {
+                if self.sidebar_focus && !self.conversations.is_empty() {
+                    self.sidebar_selection = self.sidebar_selection.saturating_sub(1);
+                }
+            }
+            UserEvent::NavigateDown => {
+                if self.sidebar_focus && !self.conversations.is_empty() {
+                    let max = self.conversations.len().saturating_sub(1);
+                    self.sidebar_selection = (self.sidebar_selection + 1).min(max);
+                }
+            }
+            UserEvent::OpenSelected => {
+                if self.sidebar_focus {
+                    self.open_selected_conversation().await;
+                }
+            }
+            UserEvent::ToggleFocus => {
+                self.sidebar_focus = !self.sidebar_focus;
+                if self.sidebar_focus && !self.conversations.is_empty() {
+                    if let Some(active_id) = self.active_conversation {
+                        if let Some(pos) = self.conversations.iter().position(|c| c.id == active_id) {
+                            self.sidebar_selection = pos;
+                        }
+                    }
+                }
             }
         }
     }
@@ -515,5 +569,27 @@ impl App {
                 .unwrap_or(0) as usize;
             (tokens, elapsed)
         })
+    }
+
+    async fn open_selected_conversation(&mut self) {
+        if let Some(conv) = self.conversations.get(self.sidebar_selection) {
+            let conv_id = conv.id;
+            if self.active_conversation == Some(conv_id) {
+                self.sidebar_focus = false;
+                return;
+            }
+            self.active_conversation = Some(conv_id);
+            match self.message_repo.list_for_conversation(conv_id).await {
+                Ok(messages) => {
+                    self.messages = messages;
+                    self.sidebar_focus = false;
+                    self.error = None;
+                    debug!(id = %conv_id, "opened conversation");
+                }
+                Err(e) => {
+                    self.error = Some(format!("Failed to load messages: {e}"));
+                }
+            }
+        }
     }
 }

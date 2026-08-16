@@ -13,6 +13,10 @@ pub enum UserEvent {
     TestConnection,
     SelectModel(usize),
     OpenCommandPalette,
+    NavigateUp,
+    NavigateDown,
+    OpenSelected,
+    ToggleFocus,
 }
 
 #[derive(Debug)]

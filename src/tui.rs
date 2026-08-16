@@ -11,7 +11,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
 use tokio::sync::mpsc;
@@ -42,7 +42,6 @@ pub async fn run(app: &mut App) -> Result<()> {
                             Some(UserEvent::Quit)
                         }
                         KeyCode::Esc => Some(UserEvent::Quit),
-                        KeyCode::Enter => Some(UserEvent::SendMessage),
                         KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             Some(UserEvent::NewConversation)
                         }
@@ -58,6 +57,9 @@ pub async fn run(app: &mut App) -> Result<()> {
                         KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             Some(UserEvent::SelectModel(usize::MAX))
                         }
+                        KeyCode::Tab => Some(UserEvent::ToggleFocus),
+                        KeyCode::Up => Some(UserEvent::NavigateUp),
+                        KeyCode::Down => Some(UserEvent::NavigateDown),
                         KeyCode::Char(c @ '1'..='9') => {
                             let idx = (c as usize) - ('1' as usize);
                             Some(UserEvent::SelectModel(idx))
@@ -99,18 +101,26 @@ pub async fn run(app: &mut App) -> Result<()> {
 }
 
 fn render(frame: &mut ratatui::Frame, app: &App) {
-    let chunks = Layout::default()
+    let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
             Constraint::Min(1),
-            Constraint::Length(3),
         ])
         .split(frame.area());
 
-    render_status_bar(frame, app, chunks[0]);
-    render_chat(frame, app, chunks[1]);
-    render_input(frame, app, chunks[2]);
+    render_status_bar(frame, app, main_chunks[0]);
+
+    let content_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(25),
+            Constraint::Min(1),
+        ])
+        .split(main_chunks[1]);
+
+    render_sidebar(frame, app, content_chunks[0]);
+    render_main(frame, app, content_chunks[1]);
 }
 
 fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
@@ -154,12 +164,80 @@ fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layou
     frame.render_widget(Paragraph::new(line), area);
 }
 
+fn render_sidebar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    let title = if app.sidebar_focus {
+        " Conversations [focused] "
+    } else {
+        " Conversations [Tab] "
+    };
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(if app.sidebar_focus {
+            Style::default().fg(Color::Cyan)
+        } else {
+            Style::default()
+        });
+
+    if app.conversations.is_empty() {
+        let empty = Paragraph::new("No conversations.\nCtrl+N to start.")
+            .style(Style::default().fg(Color::DarkGray))
+            .wrap(Wrap { trim: false })
+            .block(block);
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let items: Vec<ListItem> = app
+        .conversations
+        .iter()
+        .enumerate()
+        .map(|(i, conv)| {
+            let is_active = app.active_conversation == Some(conv.id);
+            let is_selected = i == app.sidebar_selection;
+
+            let style = if is_selected && app.sidebar_focus {
+                Style::default().fg(Color::Black).bg(Color::Cyan)
+            } else if is_active {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+
+            let title = if conv.title.len() > 20 {
+                format!("{}...", &conv.title[..18])
+            } else {
+                conv.title.clone()
+            };
+
+            ListItem::new(Line::from(Span::styled(title, style)))
+        })
+        .collect();
+
+    let list = List::new(items).block(block);
+    frame.render_widget(list, area);
+}
+
+fn render_main(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    render_chat(frame, app, chunks[0]);
+    render_input(frame, app, chunks[1]);
+}
+
 fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
     if app.active_conversation.is_none() && app.messages.is_empty() {
         lines.push(Line::from(Span::styled(
-            "No conversation. Press Ctrl+N to start one.",
+            "No conversation selected.\nSelect one from the sidebar or press Ctrl+N.",
             Style::default().fg(Color::DarkGray),
         )));
     }
@@ -209,6 +287,12 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
 }
 
 fn render_input(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
+    let focus_hint = if app.sidebar_focus {
+        "[sidebar focused — Tab to chat]"
+    } else {
+        "[Tab=sidebar]"
+    };
+
     let model_list: String = app
         .models
         .iter()
@@ -218,12 +302,16 @@ fn render_input(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Re
         .join(" ");
 
     let help = format!(
-        " Enter=send | Ctrl+N=new | Ctrl+T=test | Ctrl+M=cycle model | 1-9=pick | Alt+C=cancel | Ctrl+R=retry | Esc=quit | {} ",
-        model_list
+        " Enter=send | Ctrl+N=new | Ctrl+T=test | Ctrl+M=cycle | 1-9=pick | Alt+C=cancel | Ctrl+R=retry | Esc=quit | {} | {} ",
+        focus_hint, model_list
     );
 
     let input = Paragraph::new(app.input.as_str())
         .block(Block::default().title(help).borders(Borders::ALL))
-        .style(Style::default().fg(Color::White));
+        .style(if app.sidebar_focus {
+            Style::default().fg(Color::DarkGray)
+        } else {
+            Style::default().fg(Color::White)
+        });
     frame.render_widget(input, area);
 }
