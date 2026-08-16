@@ -11,7 +11,7 @@ use llm_tui::events::AppEvent;
 use llm_tui::llm::{FakeProvider, OpenAiCompatibleProvider};
 use llm_tui::persistence::{
     Database, SqliteConversationRepository, SqliteMessageRepository, SqliteModelRepository,
-    SqliteProviderRepository,
+    SqlitePromptRepository, SqliteProviderRepository,
 };
 
 #[tokio::main]
@@ -30,6 +30,7 @@ async fn main() -> Result<()> {
     let message_repo = Arc::new(SqliteMessageRepository::new(db.pool.clone()));
     let model_repo = Arc::new(SqliteModelRepository::new(db.pool.clone()));
     let provider_repo = Arc::new(SqliteProviderRepository::new(db.pool.clone()));
+    let prompt_repo = Arc::new(SqlitePromptRepository::new(db.pool.clone()));
 
     let (provider, provider_name): (Arc<dyn llm_tui::llm::LlmProvider>, String) =
         if config.is_provider_configured() {
@@ -75,6 +76,7 @@ async fn main() -> Result<()> {
         message_repo,
         model_repo,
         provider_repo,
+        prompt_repo,
         config.generation,
         event_tx,
     );

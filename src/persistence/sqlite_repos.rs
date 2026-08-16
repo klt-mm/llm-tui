@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use crate::domain::{Conversation, Message, Model, Prompt, Provider, ProviderProtocol, Role};
 use crate::persistence::repositories::{
-    ConversationRepository, MessageRepository, ModelRepository, PromptRepository,
-    ProviderRepository,
+    ConversationRepository, MessageRepository, MessageSearchResult, ModelRepository,
+    PromptRepository, PromptSearchResult, ProviderRepository,
 };
 
 // ---------------------------------------------------------------------------
@@ -139,6 +139,17 @@ impl ConversationRepository for SqliteConversationRepository {
             .await?;
         Ok(())
     }
+
+    async fn search_titles(&self, query: &str) -> anyhow::Result<Vec<Conversation>> {
+        let pattern = format!("%{}%", query.to_lowercase());
+        let rows = sqlx::query(
+            "SELECT * FROM conversations WHERE archived_at IS NULL AND LOWER(title) LIKE ? ORDER BY updated_at DESC",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(row_to_conversation).collect()
+    }
 }
 
 fn row_to_conversation(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Conversation> {
@@ -218,6 +229,41 @@ impl MessageRepository for SqliteMessageRepository {
                 .fetch_all(&self.pool)
                 .await?;
         rows.iter().map(row_to_message).collect()
+    }
+
+    async fn search(&self, query: &str, limit: u32) -> anyhow::Result<Vec<MessageSearchResult>> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let fts_query = query
+            .split_whitespace()
+            .map(|w| format!("\"{}\"", w.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = sqlx::query(
+            "SELECT m.*, c.title AS conversation_title \
+             FROM messages_fts f \
+             JOIN messages m ON m.id = f.message_id \
+             JOIN conversations c ON c.id = m.conversation_id \
+             WHERE messages_fts MATCH ? \
+             ORDER BY rank \
+             LIMIT ?",
+        )
+        .bind(&fts_query)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                let title: String = row.try_get("conversation_title")?;
+                let message = row_to_message(row)?;
+                Ok(MessageSearchResult {
+                    message,
+                    conversation_title: title,
+                })
+            })
+            .collect()
     }
 }
 
@@ -365,6 +411,90 @@ impl PromptRepository for SqlitePromptRepository {
             .fetch_optional(&self.pool)
             .await?;
         row.as_ref().map(row_to_prompt).transpose()
+    }
+
+    async fn list(&self) -> anyhow::Result<Vec<Prompt>> {
+        let rows = sqlx::query("SELECT * FROM prompts ORDER BY updated_at DESC")
+            .fetch_all(&self.pool)
+            .await?;
+        rows.iter().map(row_to_prompt).collect()
+    }
+
+    async fn update(&self, prompt: &Prompt) -> anyhow::Result<()> {
+        let tags_json = serde_json::to_string(&prompt.tags)?;
+        let variables_json = serde_json::to_string(&prompt.variables)?;
+        sqlx::query(
+            "UPDATE prompts SET name = ?, description = ?, content = ?, system_prompt = ?, \
+             tags_json = ?, variables_json = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&prompt.name)
+        .bind(&prompt.description)
+        .bind(&prompt.content)
+        .bind(&prompt.system_prompt)
+        .bind(&tags_json)
+        .bind(&variables_json)
+        .bind(prompt.updated_at.to_rfc3339())
+        .bind(prompt.id.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query("DELETE FROM prompts_fts WHERE prompt_id = ?")
+            .bind(prompt.id.to_string())
+            .execute(&self.pool)
+            .await?;
+        sqlx::query(
+            "INSERT INTO prompts_fts (prompt_id, name, description, content) VALUES (?, ?, ?, ?)",
+        )
+        .bind(prompt.id.to_string())
+        .bind(&prompt.name)
+        .bind(&prompt.description)
+        .bind(&prompt.content)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM prompts_fts WHERE prompt_id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("DELETE FROM prompts WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn search(&self, query: &str, limit: u32) -> anyhow::Result<Vec<PromptSearchResult>> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let fts_query = query
+            .split_whitespace()
+            .map(|w| format!("\"{}\"", w.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let rows = sqlx::query(
+            "SELECT p.* \
+             FROM prompts_fts f \
+             JOIN prompts p ON p.id = f.prompt_id \
+             WHERE prompts_fts MATCH ? \
+             ORDER BY rank \
+             LIMIT ?",
+        )
+        .bind(&fts_query)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                let prompt = row_to_prompt(row)?;
+                Ok(PromptSearchResult { prompt })
+            })
+            .collect()
     }
 }
 

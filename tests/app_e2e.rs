@@ -10,7 +10,7 @@ use llm_tui::llm::FakeProvider;
 use llm_tui::persistence::repositories::*;
 use llm_tui::persistence::{
     Database, SqliteConversationRepository, SqliteMessageRepository, SqliteModelRepository,
-    SqliteProviderRepository,
+    SqlitePromptRepository, SqliteProviderRepository,
 };
 
 async fn test_db() -> (Database, tempfile::TempDir) {
@@ -27,6 +27,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
     let msg_repo = Arc::new(SqliteMessageRepository::new(db.pool.clone()));
     let model_repo = Arc::new(SqliteModelRepository::new(db.pool.clone()));
     let provider_repo = Arc::new(SqliteProviderRepository::new(db.pool.clone()));
+    let prompt_repo = Arc::new(SqlitePromptRepository::new(db.pool.clone()));
     App::new(
         provider,
         "fake".into(),
@@ -34,6 +35,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
         msg_repo,
         model_repo,
         provider_repo,
+        prompt_repo,
         GenerationConfig::default(),
         event_tx,
     )

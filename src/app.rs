@@ -8,13 +8,14 @@ use uuid::Uuid;
 
 use crate::config::GenerationConfig;
 use crate::domain::{
-    Conversation, GenerationParameters, GenerationUsage, Message, Model, Provider,
+    Conversation, GenerationParameters, GenerationUsage, Message, Model, Prompt, Provider,
     ProviderProtocol, Role,
 };
 use crate::events::{AppEvent, ProviderEvent, UserEvent};
 use crate::llm::provider::{ChatRequest, LlmProvider, StreamEvent};
 use crate::persistence::repositories::{
-    ConversationRepository, MessageRepository, ModelRepository, ProviderRepository,
+    ConversationRepository, MessageRepository, ModelRepository, PromptRepository,
+    ProviderRepository,
 };
 
 pub struct StreamingState {
@@ -39,6 +40,38 @@ pub enum Modal {
         query: String,
         selected: usize,
     },
+    PromptPicker {
+        query: String,
+        selected: usize,
+        filtered: Vec<usize>,
+    },
+    PromptEditor {
+        editing_id: Option<Uuid>,
+        name: String,
+        description: String,
+        content: String,
+        system_prompt: String,
+        tags: String,
+        variables: String,
+        field: usize,
+    },
+    VariableInput {
+        prompt_content: String,
+        variables: Vec<String>,
+        values: Vec<String>,
+        current: usize,
+        send_immediately: bool,
+    },
+    PromptDeleteConfirm {
+        prompt_id: Uuid,
+        name: String,
+    },
+}
+
+pub enum ActiveScreen {
+    Chat,
+    Search,
+    Prompts,
 }
 
 pub struct App {
@@ -57,12 +90,30 @@ pub struct App {
     pub sidebar_focus: bool,
     pub sidebar_selection: usize,
     pub modal: Modal,
+    pub active_screen: ActiveScreen,
+    pub prompts: Vec<Prompt>,
+    pub prompt_selection: usize,
+    pub search_query: String,
+    pub search_results: Vec<SearchResultEntry>,
+    pub search_selection: usize,
     provider_id: Uuid,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
     model_repo: Arc<dyn ModelRepository>,
     provider_repo: Arc<dyn ProviderRepository>,
+    prompt_repo: Arc<dyn PromptRepository>,
     event_tx: mpsc::Sender<AppEvent>,
+}
+
+pub enum SearchResultEntry {
+    Message {
+        message: Message,
+        conversation_id: Uuid,
+        conversation_title: String,
+    },
+    Prompt {
+        prompt: Prompt,
+    },
 }
 
 impl App {
@@ -74,6 +125,7 @@ impl App {
         message_repo: Arc<dyn MessageRepository>,
         model_repo: Arc<dyn ModelRepository>,
         provider_repo: Arc<dyn ProviderRepository>,
+        prompt_repo: Arc<dyn PromptRepository>,
         generation: GenerationConfig,
         event_tx: mpsc::Sender<AppEvent>,
     ) -> Self {
@@ -93,11 +145,18 @@ impl App {
             sidebar_focus: false,
             sidebar_selection: 0,
             modal: Modal::None,
+            active_screen: ActiveScreen::Chat,
+            prompts: Vec::new(),
+            prompt_selection: 0,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_selection: 0,
             provider_id: Uuid::nil(),
             conversation_repo,
             message_repo,
             model_repo,
             provider_repo,
+            prompt_repo,
             event_tx,
         }
     }
@@ -134,6 +193,13 @@ impl App {
             Err(e) => {
                 warn!(%e, "failed to list conversations");
                 self.error = Some(format!("Failed to load conversations: {e}"));
+            }
+        }
+
+        match self.prompt_repo.list().await {
+            Ok(prompts) => self.prompts = prompts,
+            Err(e) => {
+                warn!(%e, "failed to load prompts");
             }
         }
     }
@@ -199,6 +265,35 @@ impl App {
                 UserEvent::InputChar(c) => match &mut self.modal {
                     Modal::Rename { buffer } => buffer.push(c),
                     Modal::CommandPalette { query, .. } => query.push(c),
+                    Modal::PromptPicker { query, .. } => {
+                        query.push(c);
+                        self.refresh_prompt_picker_filter();
+                    }
+                    Modal::PromptEditor {
+                        name,
+                        description,
+                        content,
+                        system_prompt,
+                        tags,
+                        variables,
+                        field,
+                        ..
+                    } => match field {
+                        0 => name.push(c),
+                        1 => description.push(c),
+                        2 => content.push(c),
+                        3 => system_prompt.push(c),
+                        4 => tags.push(c),
+                        5 => variables.push(c),
+                        _ => {}
+                    },
+                    Modal::VariableInput {
+                        values, current, ..
+                    } => {
+                        if let Some(val) = values.get_mut(*current) {
+                            val.push(c);
+                        }
+                    }
                     _ => {}
                 },
                 UserEvent::Backspace => match &mut self.modal {
@@ -208,15 +303,134 @@ impl App {
                     Modal::CommandPalette { query, .. } => {
                         query.pop();
                     }
+                    Modal::PromptPicker { query, .. } => {
+                        query.pop();
+                        self.refresh_prompt_picker_filter();
+                    }
+                    Modal::PromptEditor {
+                        name,
+                        description,
+                        content,
+                        system_prompt,
+                        tags,
+                        variables,
+                        field,
+                        ..
+                    } => match field {
+                        0 => {
+                            name.pop();
+                        }
+                        1 => {
+                            description.pop();
+                        }
+                        2 => {
+                            content.pop();
+                        }
+                        3 => {
+                            system_prompt.pop();
+                        }
+                        4 => {
+                            tags.pop();
+                        }
+                        5 => {
+                            variables.pop();
+                        }
+                        _ => {}
+                    },
+                    Modal::VariableInput {
+                        values, current, ..
+                    } => {
+                        if let Some(val) = values.get_mut(*current) {
+                            val.pop();
+                        }
+                    }
                     _ => {}
                 },
                 UserEvent::SendMessage => {
-                    // Enter confirms the modal action
                     self.confirm_modal().await;
                 }
                 UserEvent::Quit => {
-                    // Esc cancels the modal
                     self.modal = Modal::None;
+                    if matches!(self.active_screen, ActiveScreen::Search) {
+                        self.active_screen = ActiveScreen::Chat;
+                    }
+                }
+                UserEvent::NavigateUp | UserEvent::PromptFieldPrev => match &mut self.modal {
+                    Modal::PromptPicker {
+                        selected, filtered, ..
+                    } => {
+                        *selected = selected.saturating_sub(1);
+                        let _ = filtered;
+                    }
+                    Modal::PromptEditor { field, .. } => {
+                        *field = field.saturating_sub(1);
+                    }
+                    Modal::VariableInput { current, .. } => {
+                        *current = current.saturating_sub(1);
+                    }
+                    _ => {}
+                },
+                UserEvent::NavigateDown | UserEvent::PromptFieldNext => match &mut self.modal {
+                    Modal::PromptPicker {
+                        selected, filtered, ..
+                    } => {
+                        if !filtered.is_empty() {
+                            let max = filtered.len().saturating_sub(1);
+                            *selected = (*selected + 1).min(max);
+                        }
+                    }
+                    Modal::PromptEditor { field, .. } => {
+                        *field = (*field + 1).min(5);
+                    }
+                    Modal::VariableInput {
+                        current, variables, ..
+                    } => {
+                        let max = variables.len().saturating_sub(1);
+                        *current = (*current + 1).min(max);
+                    }
+                    _ => {}
+                },
+                UserEvent::PromptNew => {
+                    if matches!(self.modal, Modal::PromptPicker { .. }) {
+                        self.modal = Modal::PromptEditor {
+                            editing_id: None,
+                            name: String::new(),
+                            description: String::new(),
+                            content: String::new(),
+                            system_prompt: String::new(),
+                            tags: String::new(),
+                            variables: String::new(),
+                            field: 0,
+                        };
+                    }
+                }
+                UserEvent::PromptEditSelected(idx) => {
+                    if let Modal::PromptPicker { filtered, .. } = &self.modal
+                        && let Some(&real_idx) = filtered.get(idx)
+                        && let Some(prompt) = self.prompts.get(real_idx)
+                    {
+                        self.modal = Modal::PromptEditor {
+                            editing_id: Some(prompt.id),
+                            name: prompt.name.clone(),
+                            description: prompt.description.clone().unwrap_or_default(),
+                            content: prompt.content.clone(),
+                            system_prompt: prompt.system_prompt.clone().unwrap_or_default(),
+                            tags: prompt.tags.join(", "),
+                            variables: prompt.variables.join(", "),
+                            field: 0,
+                        };
+                    }
+                }
+                UserEvent::PromptDeleteConfirm => {
+                    if let Modal::PromptPicker { filtered, .. } = &self.modal
+                        && let Some(&real_idx) = filtered.first()
+                        && let Some(prompt) = self.prompts.get(real_idx)
+                    {
+                        self.modal = Modal::PromptDeleteConfirm {
+                            prompt_id: prompt.id,
+                            name: prompt.name.clone(),
+                        };
+                    }
                 }
                 _ => {}
             }
@@ -228,7 +442,19 @@ impl App {
                 self.should_quit = true;
             }
             UserEvent::InputChar(c) => {
-                if self.sidebar_focus {
+                if c == '/'
+                    && self.input.is_empty()
+                    && !self.sidebar_focus
+                    && matches!(self.active_screen, ActiveScreen::Chat)
+                {
+                    self.active_screen = ActiveScreen::Search;
+                    self.search_query.clear();
+                    self.search_results.clear();
+                    self.search_selection = 0;
+                } else if matches!(self.active_screen, ActiveScreen::Search) {
+                    self.search_query.push(c);
+                    self.run_search().await;
+                } else if self.sidebar_focus {
                     match c {
                         'j' => {
                             if !self.conversations.is_empty() {
@@ -248,6 +474,51 @@ impl App {
                         'q' => {
                             self.should_quit = true;
                         }
+                        'e' => {
+                            self.start_prompt_edit();
+                        }
+                        'n' => {
+                            self.active_screen = ActiveScreen::Prompts;
+                        }
+                        _ => {}
+                    }
+                } else if matches!(self.active_screen, ActiveScreen::Prompts) {
+                    match c {
+                        'j' => {
+                            if !self.prompts.is_empty() {
+                                let max = self.prompts.len().saturating_sub(1);
+                                self.prompt_selection = (self.prompt_selection + 1).min(max);
+                            }
+                        }
+                        'k' => {
+                            self.prompt_selection = self.prompt_selection.saturating_sub(1);
+                        }
+                        'n' => {
+                            self.modal = Modal::PromptEditor {
+                                editing_id: None,
+                                name: String::new(),
+                                description: String::new(),
+                                content: String::new(),
+                                system_prompt: String::new(),
+                                tags: String::new(),
+                                variables: String::new(),
+                                field: 0,
+                            };
+                        }
+                        'e' => {
+                            self.start_prompt_edit();
+                        }
+                        'd' => {
+                            if let Some(prompt) = self.prompts.get(self.prompt_selection) {
+                                self.modal = Modal::PromptDeleteConfirm {
+                                    prompt_id: prompt.id,
+                                    name: prompt.name.clone(),
+                                };
+                            }
+                        }
+                        'q' => {
+                            self.active_screen = ActiveScreen::Chat;
+                        }
                         _ => {}
                     }
                 } else {
@@ -255,13 +526,22 @@ impl App {
                 }
             }
             UserEvent::Backspace => {
-                if !self.sidebar_focus {
+                if matches!(self.active_screen, ActiveScreen::Search) {
+                    self.search_query.pop();
+                    self.run_search().await;
+                } else if !self.sidebar_focus
+                    && !matches!(self.active_screen, ActiveScreen::Prompts)
+                {
                     self.input.pop();
                 }
             }
             UserEvent::SendMessage => {
-                if self.sidebar_focus {
+                if matches!(self.active_screen, ActiveScreen::Search) {
+                    self.open_search_result().await;
+                } else if self.sidebar_focus {
                     self.open_selected_conversation().await;
+                } else if matches!(self.active_screen, ActiveScreen::Prompts) {
+                    self.start_prompt_edit();
                 } else {
                     self.send_message().await;
                 }
@@ -301,12 +581,17 @@ impl App {
                 debug!("command palette requested (not yet implemented)");
             }
             UserEvent::NavigateUp => {
-                if self.sidebar_focus && !self.conversations.is_empty() {
+                if matches!(self.active_screen, ActiveScreen::Search) {
+                    self.search_selection = self.search_selection.saturating_sub(1);
+                } else if self.sidebar_focus && !self.conversations.is_empty() {
                     self.sidebar_selection = self.sidebar_selection.saturating_sub(1);
                 }
             }
             UserEvent::NavigateDown => {
-                if self.sidebar_focus && !self.conversations.is_empty() {
+                if matches!(self.active_screen, ActiveScreen::Search) {
+                    let max = self.search_results.len().saturating_sub(1);
+                    self.search_selection = (self.search_selection + 1).min(max);
+                } else if self.sidebar_focus && !self.conversations.is_empty() {
                     let max = self.conversations.len().saturating_sub(1);
                     self.sidebar_selection = (self.sidebar_selection + 1).min(max);
                 }
@@ -345,6 +630,63 @@ impl App {
             UserEvent::OpenHelp => {
                 self.modal = Modal::Help;
             }
+            UserEvent::OpenPromptPicker => {
+                self.open_prompt_picker();
+            }
+            UserEvent::OpenPromptList => {
+                self.active_screen = ActiveScreen::Prompts;
+            }
+            UserEvent::OpenSearch => {
+                self.active_screen = ActiveScreen::Search;
+                self.search_query.clear();
+                self.search_results.clear();
+                self.search_selection = 0;
+            }
+            UserEvent::SearchNavigateUp => {
+                self.search_selection = self.search_selection.saturating_sub(1);
+            }
+            UserEvent::SearchNavigateDown => {
+                let max = self.search_results.len().saturating_sub(1);
+                self.search_selection = (self.search_selection + 1).min(max);
+            }
+            UserEvent::SearchOpenResult => {
+                self.open_search_result().await;
+            }
+            UserEvent::PromptNew => {
+                self.modal = Modal::PromptEditor {
+                    editing_id: None,
+                    name: String::new(),
+                    description: String::new(),
+                    content: String::new(),
+                    system_prompt: String::new(),
+                    tags: String::new(),
+                    variables: String::new(),
+                    field: 0,
+                };
+            }
+            UserEvent::PromptEditSelected(idx) => {
+                if let Some(prompt) = self.prompts.get(idx) {
+                    self.modal = Modal::PromptEditor {
+                        editing_id: Some(prompt.id),
+                        name: prompt.name.clone(),
+                        description: prompt.description.clone().unwrap_or_default(),
+                        content: prompt.content.clone(),
+                        system_prompt: prompt.system_prompt.clone().unwrap_or_default(),
+                        tags: prompt.tags.join(", "),
+                        variables: prompt.variables.join(", "),
+                        field: 0,
+                    };
+                }
+            }
+            UserEvent::PromptDeleteConfirm => {
+                if let Some(prompt) = self.prompts.get(self.prompt_selection) {
+                    self.modal = Modal::PromptDeleteConfirm {
+                        prompt_id: prompt.id,
+                        name: prompt.name.clone(),
+                    };
+                }
+            }
+            UserEvent::PromptFieldNext | UserEvent::PromptFieldPrev => {}
         }
     }
 
@@ -695,6 +1037,26 @@ impl App {
         }
     }
 
+    fn start_prompt_edit(&mut self) {
+        let idx = if matches!(self.active_screen, ActiveScreen::Prompts) {
+            self.prompt_selection
+        } else {
+            self.sidebar_selection
+        };
+        if let Some(prompt) = self.prompts.get(idx) {
+            self.modal = Modal::PromptEditor {
+                editing_id: Some(prompt.id),
+                name: prompt.name.clone(),
+                description: prompt.description.clone().unwrap_or_default(),
+                content: prompt.content.clone(),
+                system_prompt: prompt.system_prompt.clone().unwrap_or_default(),
+                tags: prompt.tags.join(", "),
+                variables: prompt.variables.join(", "),
+                field: 0,
+            };
+        }
+    }
+
     async fn confirm_modal(&mut self) {
         match &self.modal {
             Modal::Rename { buffer } => {
@@ -723,9 +1085,323 @@ impl App {
                 }
                 self.modal = Modal::None;
             }
+            Modal::PromptPicker {
+                filtered, selected, ..
+            } => {
+                let idx = *selected;
+                let filtered = filtered.clone();
+                if let Some(&real_idx) = filtered.get(idx)
+                    && let Some(prompt) = self.prompts.get(real_idx).cloned()
+                {
+                    self.modal = Modal::None;
+                    self.use_prompt(prompt, false).await;
+                    return;
+                }
+                self.modal = Modal::None;
+            }
+            Modal::PromptEditor { .. } => {
+                self.save_prompt_editor().await;
+            }
+            Modal::VariableInput { .. } => {
+                self.confirm_variable_input().await;
+            }
+            Modal::PromptDeleteConfirm { prompt_id, .. } => {
+                let id = *prompt_id;
+                let _ = self.prompt_repo.delete(id).await;
+                self.prompts.retain(|p| p.id != id);
+                if !self.prompts.is_empty() && self.prompt_selection >= self.prompts.len() {
+                    self.prompt_selection = self.prompts.len() - 1;
+                }
+                self.modal = Modal::None;
+            }
             _ => {
                 self.modal = Modal::None;
             }
         }
     }
+
+    fn open_prompt_picker(&mut self) {
+        let filtered: Vec<usize> = (0..self.prompts.len()).collect();
+        self.modal = Modal::PromptPicker {
+            query: String::new(),
+            selected: 0,
+            filtered,
+        };
+    }
+
+    fn refresh_prompt_picker_filter(&mut self) {
+        if let Modal::PromptPicker {
+            query,
+            selected,
+            filtered,
+        } = &mut self.modal
+        {
+            let q = query.to_lowercase();
+            *filtered = self
+                .prompts
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| {
+                    q.is_empty()
+                        || p.name.to_lowercase().contains(&q)
+                        || p.content.to_lowercase().contains(&q)
+                        || p.tags.iter().any(|t| t.to_lowercase().contains(&q))
+                })
+                .map(|(i, _)| i)
+                .collect();
+            if *selected >= filtered.len() {
+                *selected = filtered.len().saturating_sub(1);
+            }
+        }
+    }
+
+    async fn use_prompt(&mut self, prompt: Prompt, send_immediately: bool) {
+        let vars = extract_variables(&prompt.content, &prompt.variables);
+        if vars.is_empty() {
+            let resolved = prompt.content.clone();
+            if send_immediately {
+                self.input = resolved;
+                self.send_message().await;
+            } else {
+                self.input = resolved;
+            }
+            self.active_screen = ActiveScreen::Chat;
+        } else {
+            self.modal = Modal::VariableInput {
+                prompt_content: prompt.content.clone(),
+                variables: vars,
+                values: Vec::new(),
+                current: 0,
+                send_immediately,
+            };
+            if let Modal::VariableInput {
+                values, variables, ..
+            } = &mut self.modal
+            {
+                *values = vec![String::new(); variables.len()];
+            }
+        }
+    }
+
+    async fn confirm_variable_input(&mut self) {
+        let (content, _values, send_immediately) = match &self.modal {
+            Modal::VariableInput {
+                prompt_content,
+                variables,
+                values,
+                send_immediately,
+                ..
+            } => {
+                let mut resolved = prompt_content.clone();
+                for (var, val) in variables.iter().zip(values.iter()) {
+                    resolved = resolved.replace(&format!("{{{{{var}}}}}"), val);
+                }
+                (resolved, values.clone(), *send_immediately)
+            }
+            _ => return,
+        };
+        self.modal = Modal::None;
+        self.input = content;
+        self.active_screen = ActiveScreen::Chat;
+        if send_immediately {
+            self.send_message().await;
+        }
+    }
+
+    async fn save_prompt_editor(&mut self) {
+        let (editing_id, name, description, content, system_prompt, tags_str, variables_str) =
+            match &self.modal {
+                Modal::PromptEditor {
+                    editing_id,
+                    name,
+                    description,
+                    content,
+                    system_prompt,
+                    tags,
+                    variables,
+                    ..
+                } => (
+                    *editing_id,
+                    name.clone(),
+                    description.clone(),
+                    content.clone(),
+                    system_prompt.clone(),
+                    tags.clone(),
+                    variables.clone(),
+                ),
+                _ => return,
+            };
+
+        if name.trim().is_empty() {
+            self.error = Some("Prompt name cannot be empty".into());
+            return;
+        }
+
+        let tags: Vec<String> = tags_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut variables: Vec<String> = variables_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let detected = extract_variables(&content, &[]);
+        for v in detected {
+            if !variables.contains(&v) {
+                variables.push(v);
+            }
+        }
+
+        let now = Utc::now();
+        let prompt = if let Some(id) = editing_id {
+            Prompt {
+                id,
+                name,
+                description: if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                },
+                content,
+                system_prompt: if system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(system_prompt)
+                },
+                tags,
+                variables,
+                created_at: self
+                    .prompts
+                    .iter()
+                    .find(|p| p.id == id)
+                    .map(|p| p.created_at)
+                    .unwrap_or(now),
+                updated_at: now,
+            }
+        } else {
+            Prompt {
+                id: Uuid::new_v4(),
+                name,
+                description: if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                },
+                content,
+                system_prompt: if system_prompt.is_empty() {
+                    None
+                } else {
+                    Some(system_prompt)
+                },
+                tags,
+                variables,
+                created_at: now,
+                updated_at: now,
+            }
+        };
+
+        if editing_id.is_some() {
+            if let Err(e) = self.prompt_repo.update(&prompt).await {
+                self.error = Some(format!("Failed to update prompt: {e}"));
+                return;
+            }
+            if let Some(existing) = self.prompts.iter_mut().find(|p| p.id == prompt.id) {
+                *existing = prompt.clone();
+            }
+        } else {
+            if let Err(e) = self.prompt_repo.create(&prompt).await {
+                self.error = Some(format!("Failed to create prompt: {e}"));
+                return;
+            }
+            self.prompts.insert(0, prompt);
+        }
+
+        self.modal = Modal::None;
+        self.error = None;
+    }
+
+    async fn open_search_result(&mut self) {
+        if let Some(result) = self.search_results.get(self.search_selection) {
+            match result {
+                SearchResultEntry::Message {
+                    conversation_id, ..
+                } => {
+                    let conv_id = *conversation_id;
+                    self.active_conversation = Some(conv_id);
+                    match self.message_repo.list_for_conversation(conv_id).await {
+                        Ok(messages) => self.messages = messages,
+                        Err(e) => self.error = Some(format!("Failed to load messages: {e}")),
+                    }
+                    self.active_screen = ActiveScreen::Chat;
+                    self.sidebar_focus = false;
+                }
+                SearchResultEntry::Prompt { prompt } => {
+                    let prompt = prompt.clone();
+                    self.active_screen = ActiveScreen::Chat;
+                    self.use_prompt(prompt, false).await;
+                }
+            }
+        }
+    }
+
+    pub async fn run_search(&mut self) {
+        let query = self.search_query.clone();
+        if query.trim().is_empty() {
+            self.search_results.clear();
+            return;
+        }
+
+        let mut results = Vec::new();
+
+        match self.message_repo.search(&query, 20).await {
+            Ok(msg_results) => {
+                for r in msg_results {
+                    let conv_id = r.message.conversation_id;
+                    results.push(SearchResultEntry::Message {
+                        message: r.message,
+                        conversation_id: conv_id,
+                        conversation_title: r.conversation_title,
+                    });
+                }
+            }
+            Err(e) => {
+                warn!(%e, "message search failed");
+            }
+        }
+
+        match self.prompt_repo.search(&query, 10).await {
+            Ok(prompt_results) => {
+                for r in prompt_results {
+                    results.push(SearchResultEntry::Prompt { prompt: r.prompt });
+                }
+            }
+            Err(e) => {
+                warn!(%e, "prompt search failed");
+            }
+        }
+
+        self.search_results = results;
+        self.search_selection = 0;
+    }
+}
+
+fn extract_variables(content: &str, declared: &[String]) -> Vec<String> {
+    let mut vars: Vec<String> = declared.to_vec();
+    let mut remaining = content;
+    while let Some(start) = remaining.find("{{") {
+        if let Some(end) = remaining[start..].find("}}") {
+            let var_name = remaining[start + 2..start + end].trim().to_string();
+            if !var_name.is_empty() && !vars.contains(&var_name) {
+                vars.push(var_name);
+            }
+            remaining = &remaining[start + end + 2..];
+        } else {
+            break;
+        }
+    }
+    vars
 }

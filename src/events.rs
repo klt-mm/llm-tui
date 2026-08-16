@@ -22,6 +22,17 @@ pub enum UserEvent {
     ConfirmAction,
     CancelModal,
     OpenHelp,
+    OpenPromptPicker,
+    OpenPromptList,
+    OpenSearch,
+    SearchNavigateUp,
+    SearchNavigateDown,
+    SearchOpenResult,
+    PromptNew,
+    PromptEditSelected(usize),
+    PromptDeleteConfirm,
+    PromptFieldNext,
+    PromptFieldPrev,
 }
 
 #[derive(Debug)]
