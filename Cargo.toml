@@ -8,6 +8,7 @@ description = "A local-first terminal UI client for llama.cpp and OpenAI-compati
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+base64 = "0.22"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 crossterm = "0.29"

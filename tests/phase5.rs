@@ -90,6 +90,9 @@ async fn generation_run_create_and_list() {
         role: Role::Assistant,
         content: "test response".into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     };
@@ -144,6 +147,9 @@ async fn branch_history_opens_with_messages() {
         role: Role::User,
         content: "Hello".into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     });
@@ -154,6 +160,9 @@ async fn branch_history_opens_with_messages() {
         role: Role::Assistant,
         content: "Hi there!".into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     });
@@ -188,6 +197,9 @@ async fn branch_history_navigation() {
             },
             content: format!("Message {}", i),
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         });
@@ -244,6 +256,9 @@ async fn edit_as_branch_copies_to_input() {
         role: Role::User,
         content: msg_content.into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     });

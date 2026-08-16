@@ -94,7 +94,18 @@ impl LlmProvider for FakeProvider {
     async fn capabilities(&self) -> Result<Capabilities, LlmError> {
         Ok(Capabilities {
             streaming: true,
-            ..Default::default()
+            tool_calling: false,
+            tools: false,
+            parallel_tool_calls: false,
+            vision: false,
+            image_input: false,
+            image_formats: vec![],
+            structured_output: false,
+            json_mode: false,
+            reasoning: false,
+            embeddings: false,
+            responses_api: false,
+            max_output_tokens: None,
         })
     }
 
@@ -112,6 +123,7 @@ impl LlmProvider for FakeProvider {
                 StreamEvent::Delta(s) => content.push_str(&s),
                 StreamEvent::Usage(u) => usage = u,
                 StreamEvent::ReasoningDelta(_) => {}
+                StreamEvent::ToolCall { .. } => {}
                 StreamEvent::Completed => break,
             }
         }

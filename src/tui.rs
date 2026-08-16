@@ -338,9 +338,60 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
         if msg.role == Role::Assistant {
             let md_lines = render_markdown(&msg.content);
             lines.extend(md_lines);
+
+            // Render tool calls if present
+            if let Some(ref tool_calls) = msg.tool_calls {
+                for tool_call in tool_calls {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(Span::styled(
+                        format!("  🔧 Tool: {}", tool_call.name),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    )));
+                    lines.push(Line::from(Span::styled(
+                        format!(
+                            "     Args: {}",
+                            serde_json::to_string_pretty(&tool_call.arguments).unwrap_or_default()
+                        ),
+                        Style::default().fg(Color::DarkGray),
+                    )));
+                }
+            }
+        } else if msg.role == Role::Tool {
+            // Render tool results
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "  Result for tool call: {}",
+                    msg.tool_call_id.as_deref().unwrap_or("unknown")
+                ),
+                Style::default().fg(Color::Magenta),
+            )));
+            for text_line in msg.content.lines() {
+                lines.push(Line::from(format!("  {}", text_line)));
+            }
         } else {
             for text_line in msg.content.lines() {
                 lines.push(Line::from(text_line.to_string()));
+            }
+
+            // Render images if present
+            if let Some(ref images) = msg.images {
+                for (i, image) in images.iter().enumerate() {
+                    lines.push(Line::from(""));
+                    lines.push(Line::from(Span::styled(
+                        format!(
+                            "  🖼️  Image {}: {}",
+                            i + 1,
+                            if image.url.starts_with("data:") {
+                                "embedded"
+                            } else {
+                                &image.url
+                            }
+                        ),
+                        Style::default().fg(Color::Blue),
+                    )));
+                }
             }
         }
         lines.push(Line::from(""));
@@ -386,9 +437,15 @@ fn render_input(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Re
         .collect::<Vec<_>>()
         .join(" ");
 
+    let image_indicator = if app.pending_images.is_empty() {
+        String::new()
+    } else {
+        format!(" | {} image(s) attached", app.pending_images.len())
+    };
+
     let help = format!(
-        " Enter=send | Ctrl+N=new | Ctrl+T=test | Ctrl+M=cycle | 1-9=pick | Alt+C=cancel | Ctrl+R=retry | Esc=quit | {} | {} ",
-        focus_hint, model_list
+        " Enter=send | Ctrl+N=new | /image <path>=attach | Ctrl+T=test | Ctrl+M=cycle | 1-9=pick | Alt+C=cancel | Ctrl+R=retry | Esc=quit | {} | {}{} ",
+        focus_hint, model_list, image_indicator
     );
 
     let input = Paragraph::new(app.input.as_str())

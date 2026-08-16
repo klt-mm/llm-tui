@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::domain::{Capabilities, GenerationParameters, GenerationUsage, Message, Model};
+use crate::domain::{
+    Capabilities, GenerationParameters, GenerationUsage, Message, Model, ToolDefinition,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LlmError {
@@ -19,6 +21,7 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<Message>,
     pub generation: GenerationParameters,
+    pub tools: Option<Vec<ToolDefinition>>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +34,11 @@ pub struct ChatResponse {
 pub enum StreamEvent {
     Delta(String),
     ReasoningDelta(String),
+    ToolCall {
+        id: String,
+        name: String,
+        arguments: String,
+    },
     Usage(GenerationUsage),
     Completed,
 }

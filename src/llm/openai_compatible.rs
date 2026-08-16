@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::domain::{Capabilities, GenerationUsage, Model, Provider, Role};
+use crate::domain::{
+    Capabilities, GenerationUsage, Model, Provider, Role, ToolCall, ToolDefinition,
+};
 use crate::llm::provider::{ChatRequest, ChatResponse, LlmError, LlmProvider, StreamEvent};
 
 #[derive(Clone)]
@@ -62,9 +64,9 @@ struct ModelItem {
 }
 
 #[derive(Serialize)]
-struct ChatBody<'a> {
-    model: &'a str,
-    messages: Vec<ChatMessage<'a>>,
+struct ChatBody {
+    model: String,
+    messages: Vec<ChatMessage>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -72,30 +74,84 @@ struct ChatBody<'a> {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<ToolDefinition>>,
 }
 
 #[derive(Serialize)]
-struct ChatMessage<'a> {
+struct ChatMessage {
     role: &'static str,
-    content: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
 }
 
-impl<'a> ChatBody<'a> {
-    fn from_request(req: &'a ChatRequest) -> Self {
+impl ChatBody {
+    fn from_request(req: &ChatRequest) -> Self {
         Self {
-            model: &req.model,
+            model: req.model.clone(),
             messages: req
                 .messages
                 .iter()
-                .map(|m| ChatMessage {
-                    role: OpenAiCompatibleProvider::role(&m.role),
-                    content: &m.content,
+                .map(|m| {
+                    // Build content based on whether images are present
+                    let content = if let Some(ref images) = m.images {
+                        if !images.is_empty() {
+                            // Multimodal content: array of text and image parts
+                            let mut parts = Vec::new();
+
+                            // Add text part if content is not empty
+                            if !m.content.is_empty() {
+                                parts.push(serde_json::json!({
+                                    "type": "text",
+                                    "text": m.content
+                                }));
+                            }
+
+                            // Add image parts
+                            for image in images {
+                                let mut image_part = serde_json::json!({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": image.url
+                                    }
+                                });
+
+                                if let Some(ref detail) = image.detail {
+                                    image_part["image_url"]["detail"] = serde_json::json!(detail);
+                                }
+
+                                parts.push(image_part);
+                            }
+
+                            Some(serde_json::Value::Array(parts))
+                        } else if !m.content.is_empty() {
+                            Some(serde_json::Value::String(m.content.clone()))
+                        } else {
+                            None
+                        }
+                    } else if !m.content.is_empty() {
+                        Some(serde_json::Value::String(m.content.clone()))
+                    } else {
+                        None
+                    };
+
+                    ChatMessage {
+                        role: OpenAiCompatibleProvider::role(&m.role),
+                        content,
+                        tool_calls: m.tool_calls.clone(),
+                        tool_call_id: m.tool_call_id.clone(),
+                    }
                 })
                 .collect(),
             stream: true,
             temperature: req.generation.temperature,
             top_p: req.generation.top_p,
             max_tokens: req.generation.max_tokens,
+            tools: req.tools.clone(),
         }
     }
 }
@@ -130,9 +186,22 @@ impl LlmProvider for OpenAiCompatibleProvider {
     }
 
     async fn capabilities(&self) -> Result<Capabilities, LlmError> {
+        // For OpenAI-compatible providers, we assume standard capabilities
+        // In a real implementation, we'd probe endpoints or check model metadata
         Ok(Capabilities {
             streaming: true,
-            ..Default::default()
+            tool_calling: true, // Most OpenAI-compatible providers support this
+            tools: true,
+            parallel_tool_calls: true,
+            vision: true, // GPT-4V and compatible models
+            image_input: true,
+            image_formats: vec!["png".into(), "jpeg".into(), "webp".into()],
+            structured_output: true, // JSON mode support
+            json_mode: true,
+            reasoning: false,              // Depends on model (o1, etc.)
+            embeddings: false,             // Separate endpoint
+            responses_api: false,          // Newer API
+            max_output_tokens: Some(4096), // Typical default
         })
     }
 
@@ -150,6 +219,7 @@ impl LlmProvider for OpenAiCompatibleProvider {
                 StreamEvent::Delta(s) => content.push_str(&s),
                 StreamEvent::Usage(u) => usage = u,
                 StreamEvent::ReasoningDelta(_) => {}
+                StreamEvent::ToolCall { .. } => {}
                 StreamEvent::Completed => break,
             }
         }
@@ -203,10 +273,28 @@ impl LlmProvider for OpenAiCompatibleProvider {
                                         let parsed: Result<serde_json::Value, _> = serde_json::from_str(data);
                                         let Ok(value) = parsed else { continue };
 
+                                        // Handle content deltas
                                         if let Some(text) = value["choices"][0]["delta"]["content"].as_str()
                                             && tx.send(Ok(StreamEvent::Delta(text.to_string()))).await.is_err() {
                                                 return;
                                             }
+
+                                        // Handle tool calls
+                                        if let Some(tool_calls) = value["choices"][0]["delta"]["tool_calls"].as_array() {
+                                            for tool_call in tool_calls {
+                                                if let (Some(id), Some(name), Some(args)) = (
+                                                    tool_call["id"].as_str(),
+                                                    tool_call["function"]["name"].as_str(),
+                                                    tool_call["function"]["arguments"].as_str(),
+                                                ) && tx.send(Ok(StreamEvent::ToolCall {
+                                                    id: id.to_string(),
+                                                    name: name.to_string(),
+                                                    arguments: args.to_string(),
+                                                })).await.is_err() {
+                                                    return;
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

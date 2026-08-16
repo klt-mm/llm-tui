@@ -289,6 +289,9 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Message> {
         role,
         content: row.try_get("content")?,
         reasoning_content: row.try_get("reasoning_content")?,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata,
         created_at: chrono::DateTime::parse_from_rfc3339(&row.try_get::<String, _>("created_at")?)
             .map(|dt| dt.with_timezone(&chrono::Utc))?,

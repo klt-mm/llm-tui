@@ -68,6 +68,9 @@ pub fn build_context(
             role: crate::domain::Role::System,
             content: prompt.to_string(),
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
             metadata: serde_json::json!({}),
             created_at: chrono::Utc::now(),
         };
@@ -104,6 +107,9 @@ mod tests {
             role,
             content: content.to_string(),
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            images: None,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         }

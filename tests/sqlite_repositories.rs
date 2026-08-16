@@ -57,6 +57,9 @@ fn make_message(conversation_id: Uuid, role: Role, content: &str) -> Message {
         role,
         content: content.into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     }

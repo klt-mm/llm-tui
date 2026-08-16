@@ -4,6 +4,8 @@ pub mod context;
 pub mod domain;
 pub mod error;
 pub mod events;
+pub mod image;
 pub mod llm;
 pub mod markdown;
 pub mod persistence;
+pub mod tools;

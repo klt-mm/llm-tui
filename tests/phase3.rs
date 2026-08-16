@@ -199,6 +199,9 @@ async fn message_fts_search_finds_messages() {
         role: Role::User,
         content: "hello world search test".into(),
         reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        images: None,
         metadata: serde_json::json!({}),
         created_at: Utc::now(),
     };

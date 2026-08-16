@@ -9,8 +9,8 @@ use uuid::Uuid;
 use crate::config::{ContextConfig, GenerationConfig};
 use crate::context::{self, ContextPolicy};
 use crate::domain::{
-    Conversation, GenerationParameters, GenerationRun, GenerationUsage, Message, Model, Prompt,
-    Provider, ProviderProtocol, Role,
+    Capabilities, Conversation, GenerationParameters, GenerationRun, GenerationUsage, Message,
+    Model, Prompt, Provider, ProviderProtocol, Role,
 };
 use crate::events::{AppEvent, ProviderEvent, UserEvent};
 use crate::llm::provider::{ChatRequest, LlmProvider, StreamEvent};
@@ -152,6 +152,7 @@ pub enum ActiveScreen {
 pub struct App {
     pub provider: Arc<dyn LlmProvider>,
     pub provider_name: String,
+    pub capabilities: Capabilities,
     pub models: Vec<Model>,
     pub selected_model: Option<String>,
     pub conversations: Vec<Conversation>,
@@ -175,6 +176,8 @@ pub struct App {
     pub search_selection: usize,
     pub provider_id: Uuid,
     pub last_generation_metrics: Option<GenerationMetrics>,
+    pub tool_registry: Arc<crate::tools::ToolRegistry>,
+    pub pending_images: Vec<crate::domain::ImageContent>,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
     model_repo: Arc<dyn ModelRepository>,
@@ -210,9 +213,11 @@ impl App {
         context: ContextConfig,
         event_tx: mpsc::Sender<AppEvent>,
     ) -> Self {
+        let tool_registry = Arc::new(crate::tools::ToolRegistry::new());
         Self {
             provider,
             provider_name,
+            capabilities: Capabilities::default(),
             models: Vec::new(),
             selected_model: None,
             conversations: Vec::new(),
@@ -236,6 +241,8 @@ impl App {
             search_selection: 0,
             provider_id: Uuid::nil(),
             last_generation_metrics: None,
+            tool_registry,
+            pending_images: Vec::new(),
             conversation_repo,
             message_repo,
             model_repo,
@@ -272,6 +279,34 @@ impl App {
         }
 
         self.refresh_models().await;
+
+        // Load provider capabilities
+        match self.provider.capabilities().await {
+            Ok(caps) => {
+                debug!(?caps, "loaded provider capabilities");
+                self.capabilities = caps;
+            }
+            Err(e) => {
+                warn!(%e, "failed to load capabilities");
+            }
+        }
+
+        // Register built-in tools if tool calling is supported
+        if self.capabilities.supports_feature("tool_calling") {
+            self.tool_registry
+                .register(Box::new(crate::tools::ShellTool))
+                .await;
+            self.tool_registry
+                .register(Box::new(crate::tools::ReadFileTool))
+                .await;
+            self.tool_registry
+                .register(Box::new(crate::tools::WriteFileTool))
+                .await;
+            self.tool_registry
+                .register(Box::new(crate::tools::ListDirectoryTool))
+                .await;
+            debug!("registered built-in tools");
+        }
 
         match self.conversation_repo.list().await {
             Ok(conversations) => self.conversations = conversations,
@@ -975,7 +1010,26 @@ impl App {
 
     async fn send_message(&mut self) {
         let input = self.input.clone();
-        if input.trim().is_empty() {
+
+        // Handle /image command
+        if let Some(path) = input.strip_prefix("/image ") {
+            let path = path.trim();
+            match crate::image::load_image_from_path(path) {
+                Ok(image) => {
+                    self.pending_images.push(image);
+                    self.input.clear();
+                    self.error = None;
+                    return;
+                }
+                Err(e) => {
+                    self.error = Some(e);
+                    self.input.clear();
+                    return;
+                }
+            }
+        }
+
+        if input.trim().is_empty() && self.pending_images.is_empty() {
             return;
         }
         if self.streaming.is_some() {
@@ -990,6 +1044,12 @@ impl App {
             }
         };
 
+        let images = if self.pending_images.is_empty() {
+            None
+        } else {
+            Some(std::mem::take(&mut self.pending_images))
+        };
+
         let user_message = Message {
             id: Uuid::new_v4(),
             conversation_id,
@@ -997,6 +1057,9 @@ impl App {
             role: Role::User,
             content: input,
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            images,
             metadata: serde_json::json!({}),
             created_at: Utc::now(),
         };
@@ -1054,6 +1117,7 @@ impl App {
             model,
             messages: bounded_messages,
             generation: self.build_generation_params(),
+            tools: None,
         };
 
         let cancel = CancellationToken::new();
@@ -1069,6 +1133,7 @@ impl App {
 
         let provider = Arc::clone(&self.provider);
         let event_tx = self.event_tx.clone();
+        let tool_registry = Arc::clone(&self.tool_registry);
 
         let _ = event_tx
             .send(AppEvent::Provider(ProviderEvent::StreamStarted {
@@ -1080,6 +1145,8 @@ impl App {
             match provider.stream_chat(request, cancel).await {
                 Ok(mut rx) => {
                     let mut content = String::new();
+                    let mut tool_calls: Vec<crate::domain::ToolCall> = Vec::new();
+
                     while let Some(event) = rx.recv().await {
                         match event {
                             Ok(StreamEvent::Delta(text)) => {
@@ -1107,7 +1174,39 @@ impl App {
                                     }))
                                     .await;
                             }
+                            Ok(StreamEvent::ToolCall {
+                                id,
+                                name,
+                                arguments,
+                            }) => {
+                                // Parse arguments as JSON
+                                let args: serde_json::Value = serde_json::from_str(&arguments)
+                                    .unwrap_or(serde_json::json!({}));
+
+                                tool_calls.push(crate::domain::ToolCall {
+                                    id,
+                                    name,
+                                    arguments: args,
+                                });
+                            }
                             Ok(StreamEvent::Completed) => {
+                                // If there are tool calls, execute them
+                                let final_tool_calls = if !tool_calls.is_empty() {
+                                    // Execute each tool call
+                                    for tool_call in &tool_calls {
+                                        let result = tool_registry.execute(tool_call).await;
+                                        debug!(
+                                            tool = %tool_call.name,
+                                            success = !result.is_error,
+                                            "tool execution completed"
+                                        );
+                                        // TODO: Send tool results back to model for continued generation
+                                    }
+                                    Some(tool_calls)
+                                } else {
+                                    None
+                                };
+
                                 let assistant = Message {
                                     id: assistant_message_id,
                                     conversation_id,
@@ -1115,6 +1214,9 @@ impl App {
                                     role: Role::Assistant,
                                     content,
                                     reasoning_content: None,
+                                    tool_calls: final_tool_calls,
+                                    tool_call_id: None,
+                                    images: None,
                                     metadata: serde_json::json!({}),
                                     created_at: Utc::now(),
                                 };
@@ -1143,6 +1245,13 @@ impl App {
                         role: Role::Assistant,
                         content,
                         reasoning_content: None,
+                        tool_calls: if tool_calls.is_empty() {
+                            None
+                        } else {
+                            Some(tool_calls)
+                        },
+                        tool_call_id: None,
+                        images: None,
                         metadata: serde_json::json!({}),
                         created_at: Utc::now(),
                     };
