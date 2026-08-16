@@ -1,9 +1,15 @@
 [package]
 name = "llm-tui"
-version = "0.1.0"
+version = "1.0.2"
 edition = "2024"
 license = "MIT"
-description = "A local-first terminal UI client for llama.cpp and OpenAI-compatible LLM endpoints."
+description = "LLM-TUI: A local-first, keyboard-driven terminal UI client for llama.cpp and OpenAI-compatible LLM endpoints."
+repository = "https://github.com/klt-mm/llm-tui"
+homepage = "https://klt-mm.github.io/llm-tui"
+documentation = "https://klt-mm.github.io/llm-tui"
+readme = "README.md"
+keywords = ["llm", "tui", "terminal", "ai", "chat"]
+categories = ["command-line-utilities", "text-editors"]
 
 [dependencies]
 anyhow = "1"

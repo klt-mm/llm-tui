@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usage Guide - LLM-TUI</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">LLM-TUI</div>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li><a href="contributing.html">Contributing</a></li>
+                <li><a href="resources.html">Resources</a></li>
+                <li><a href="https://github.com/klt-mm/llm-tui" target="_blank">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="content">
+            <h1>Usage Guide</h1>
+            
+            <h2>Getting Started</h2>
+            <p>Launch LLM-TUI by running:</p>
+            <div class="code-block">
+                <pre><code>llm-tui</code></pre>
+            </div>
+            <p>The application will create a SQLite database in the current directory (or use the path specified in <code>DATABASE_URL</code>).</p>
+
+            <h2>Interface Overview</h2>
+            <p>LLM-TUI has a three-panel layout:</p>
+            <ul>
+                <li><strong>Left Panel:</strong> Conversation sidebar - list and manage conversations</li>
+                <li><strong>Center Panel:</strong> Chat view - display messages and streaming responses</li>
+                <li><strong>Bottom Panel:</strong> Input area - type messages and commands</li>
+                <li><strong>Top Bar:</strong> Status bar - shows provider, model, and metrics</li>
+            </ul>
+
+            <h2>Keyboard Shortcuts</h2>
+            
+            <h3>Global Shortcuts</h3>
+            <table class="shortcuts-table">
+                <thead>
+                    <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><kbd>Ctrl+N</kbd></td><td>New conversation</td></tr>
+                    <tr><td><kbd>Ctrl+K</kbd></td><td>Command palette</td></tr>
+                    <tr><td><kbd>Ctrl+P</kbd></td><td>Prompt picker</td></tr>
+                    <tr><td><kbd>Ctrl+L</kbd></td><td>Prompt list</td></tr>
+                    <tr><td><kbd>Ctrl+F</kbd></td><td>Search</td></tr>
+                    <tr><td><kbd>Ctrl+G</kbd></td><td>Generation settings</td></tr>
+                    <tr><td><kbd>Ctrl+B</kbd></td><td>Branch history</td></tr>
+                    <tr><td><kbd>Ctrl+T</kbd></td><td>Test connection</td></tr>
+                    <tr><td><kbd>Ctrl+M</kbd></td><td>Cycle model</td></tr>
+                    <tr><td><kbd>Ctrl+R</kbd></td><td>Retry generation</td></tr>
+                    <tr><td><kbd>Alt+C</kbd></td><td>Cancel generation</td></tr>
+                    <tr><td><kbd>?</kbd></td><td>Show help</td></tr>
+                    <tr><td><kbd>Esc</kbd></td><td>Quit / Close modal</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Sidebar Navigation</h3>
+            <table class="shortcuts-table">
+                <thead>
+                    <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Navigate down</td></tr>
+                    <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Navigate up</td></tr>
+                    <tr><td><kbd>Enter</kbd></td><td>Open conversation</td></tr>
+                    <tr><td><kbd>r</kbd></td><td>Rename conversation</td></tr>
+                    <tr><td><kbd>d</kbd></td><td>Delete conversation</td></tr>
+                    <tr><td><kbd>n</kbd></td><td>Prompts screen</td></tr>
+                    <tr><td><kbd>1-9</kbd></td><td>Select model</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Chat Input</h3>
+            <table class="shortcuts-table">
+                <thead>
+                    <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td><kbd>Enter</kbd></td><td>Send message</td></tr>
+                    <tr><td><kbd>Tab</kbd></td><td>Toggle focus to sidebar</td></tr>
+                    <tr><td><kbd>/</kbd></td><td>Open search (when input empty)</td></tr>
+                </tbody>
+            </table>
+
+            <h2>Basic Workflow</h2>
+            
+            <h3>1. Start a Conversation</h3>
+            <p>Press <kbd>Ctrl+N</kbd> to create a new conversation, or select an existing one from the sidebar.</p>
+
+            <h3>2. Send a Message</h3>
+            <p>Type your message in the input area and press <kbd>Enter</kbd> to send. The response will stream in real-time.</p>
+
+            <h3>3. Cancel Generation</h3>
+            <p>If you want to stop the current generation, press <kbd>Alt+C</kbd>.</p>
+
+            <h3>4. Retry</h3>
+            <p>To retry the last generation, press <kbd>Ctrl+R</kbd>.</p>
+
+            <h2>Advanced Features</h2>
+
+            <h3>Command Palette</h3>
+            <p>Press <kbd>Ctrl+K</kbd> to open the command palette. Type to filter commands, then press <kbd>Enter</kbd> to execute.</p>
+            <p>Available commands:</p>
+            <ul>
+                <li>New Conversation</li>
+                <li>Search</li>
+                <li>Prompt Picker</li>
+                <li>Prompt List</li>
+                <li>Select Model</li>
+                <li>Select Provider</li>
+                <li>Generation Settings</li>
+                <li>Branch History</li>
+                <li>Test Connection</li>
+                <li>Keyboard Shortcuts</li>
+                <li>Quit</li>
+            </ul>
+
+            <h3>Prompt Management</h3>
+            <p>LLM-TUI includes a powerful prompt library:</p>
+            <ul>
+                <li><kbd>Ctrl+P</kbd> - Open prompt picker to select and use a prompt</li>
+                <li><kbd>Ctrl+L</kbd> - Open prompt list to manage prompts</li>
+            </ul>
+            <p>In the prompt list, you can:</p>
+            <ul>
+                <li><kbd>n</kbd> - Create new prompt</li>
+                <li><kbd>e</kbd> - Edit selected prompt</li>
+                <li><kbd>d</kbd> - Delete selected prompt</li>
+                <li><kbd>Enter</kbd> - Use selected prompt</li>
+            </ul>
+
+            <h4>Prompt Variables</h4>
+            <p>Prompts can include variables using <code>{{variable_name}}</code> syntax. When you use a prompt with variables, you'll be prompted to fill in the values.</p>
+            <div class="code-block">
+                <pre><code>Write a {{language}} function that {{action}}.
+Make sure to include {{requirements}}.</code></pre>
+            </div>
+
+            <h4>Prompt Tags</h4>
+            <p>Organize prompts with tags for easy filtering and searching.</p>
+
+            <h3>Search</h3>
+            <p>Press <kbd>Ctrl+F</kbd> or <kbd>/</kbd> (when input is empty) to open search. Search across:</p>
+            <ul>
+                <li>Messages in all conversations</li>
+                <li>Prompt names and content</li>
+            </ul>
+            <p>Use <kbd>↑</kbd>/<kbd>↓</kbd> to navigate results and <kbd>Enter</kbd> to open.</p>
+
+            <h3>Branching</h3>
+            <p>LLM-TUI supports conversation branching:</p>
+            <ul>
+                <li><kbd>Ctrl+B</kbd> - Open branch history view</li>
+                <li>Select a message and press <kbd>Enter</kbd> to edit as branch</li>
+                <li>The edited message will be copied to input</li>
+                <li>Sending creates a new branch from that point</li>
+            </ul>
+            <p>Branch indicators (↩) show message relationships in the chat view.</p>
+
+            <h3>Tool Calling</h3>
+            <p>If your provider supports tool calling, LLM-TUI can execute tools automatically:</p>
+            <ul>
+                <li><strong>shell</strong> - Execute shell commands</li>
+                <li><strong>read_file</strong> - Read file contents</li>
+                <li><strong>write_file</strong> - Write to files</li>
+                <li><strong>list_directory</strong> - List directory contents</li>
+            </ul>
+            <p>Tool calls and results are displayed in the chat view with 🛠️ icons.</p>
+
+            <h3>Vision Support</h3>
+            <p>Attach images to your messages for vision-capable models:</p>
+            <div class="code-block">
+                <pre><code>/image /path/to/image.png</code></pre>
+            </div>
+            <p>You can attach multiple images. They'll be sent with your next message.</p>
+            <p>The status bar shows the number of attached images.</p>
+
+            <h3>Generation Settings</h3>
+            <p>Press <kbd>Ctrl+G</kbd> to adjust generation parameters:</p>
+            <ul>
+                <li><strong>Temperature</strong> - Controls randomness (0.0-2.0)</li>
+                <li><strong>Top P</strong> - Nucleus sampling (0.0-1.0)</li>
+                <li><strong>Max Tokens</strong> - Maximum response length</li>
+            </ul>
+            <p>Leave fields empty to use provider defaults.</p>
+
+            <h3>Context Management</h3>
+            <p>LLM-TUI automatically manages context within token budgets:</p>
+            <ul>
+                <li>Status bar shows token usage (e.g., "1.2k/4k tok")</li>
+                <li>System prompt is always included</li>
+                <li>Most recent messages are prioritized</li>
+                <li>Oldest messages are dropped when over budget</li>
+            </ul>
+
+            <h3>Model and Provider Selection</h3>
+            <p>Switch between models and providers:</p>
+            <ul>
+                <li><kbd>Ctrl+M</kbd> - Cycle through available models</li>
+                <li><kbd>1-9</kbd> - Select model by number</li>
+                <li>Command palette - "Select Provider" to switch providers</li>
+            </ul>
+
+            <h2>Configuration</h2>
+            <p>Configuration file location: <code>~/.config/llm-tui/config.toml</code></p>
+            <div class="code-block">
+                <pre><code>[provider]
+base_url = "http://localhost:8080/v1"
+api_key = "your-api-key"
+
+[generation]
+temperature = 0.7
+top_p = 0.9
+max_tokens = 2048
+
+[context]
+max_tokens = 4096
+reserve_for_response = 1024</code></pre>
+            </div>
+
+            <h2>Tips and Best Practices</h2>
+            <ul>
+                <li>Use <kbd>Ctrl+K</kbd> for quick access to any feature</li>
+                <li>Create prompts for common tasks to save time</li>
+                <li>Use tags to organize your prompt library</li>
+                <li>Leverage branching to explore different conversation paths</li>
+                <li>Monitor token usage in the status bar to optimize context</li>
+                <li>Use <kbd>Alt+C</kbd> to cancel long generations</li>
+                <li>Test your connection with <kbd>Ctrl+T</kbd> if you encounter issues</li>
+            </ul>
+
+            <h2>Troubleshooting</h2>
+            
+            <h3>Connection Issues</h3>
+            <p>If you can't connect to your provider:</p>
+            <ul>
+                <li>Check your configuration file</li>
+                <li>Verify the provider is running</li>
+                <li>Use <kbd>Ctrl+T</kbd> to test the connection</li>
+                <li>Check the error message in the status bar</li>
+            </ul>
+
+            <h3>Slow Performance</h3>
+            <ul>
+                <li>Reduce <code>max_tokens</code> in generation settings</li>
+                <li>Lower the context budget in configuration</li>
+                <li>Check your provider's performance</li>
+            </ul>
+
+            <h3>Database Issues</h3>
+            <ul>
+                <li>Ensure the database file is writable</li>
+                <li>Check disk space</li>
+                <li>Try deleting and recreating the database</li>
+            </ul>
+
+            <h2>Next Steps</h2>
+            <p>Now that you know how to use LLM-TUI, check out:</p>
+            <ul>
+                <li><a href="contributing.html">Contributing Guide</a> - Learn how to contribute to the project</li>
+                <li><a href="resources.html">Resources</a> - Learn more about the technologies used</li>
+                <li><a href="https://github.com/klt-mm/llm-tui" target="_blank">GitHub Repository</a> - View source code and report issues</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 LLM-TUI. Released under the MIT License.</p>
+        <p>Built with ❤️ using Rust</p>
+    </footer>
+</body>
+</html>

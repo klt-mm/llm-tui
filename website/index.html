@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM-TUI - Terminal UI for LLMs</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">LLM-TUI</div>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li><a href="contributing.html">Contributing</a></li>
+                <li><a href="resources.html">Resources</a></li>
+                <li><a href="https://github.com/klt-mm/llm-tui" target="_blank">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>LLM-TUI</h1>
+            <p class="tagline">A local-first, keyboard-driven terminal UI client for llama.cpp and OpenAI-compatible LLM endpoints</p>
+            <div class="badges">
+                <img src="https://img.shields.io/badge/version-1.0.2-blue.svg" alt="Version">
+                <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
+                <img src="https://img.shields.io/badge/tests-69+-brightgreen.svg" alt="Tests">
+                <img src="https://img.shields.io/badge/Rust-2024-orange.svg" alt="Rust">
+            </div>
+            <div class="cta-buttons">
+                <a href="installation.html" class="btn btn-primary">Get Started</a>
+                <a href="https://github.com/klt-mm/llm-tui" class="btn btn-secondary">View on GitHub</a>
+            </div>
+        </section>
+
+        <section class="features">
+            <h2>Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h3>🚀 Local-First</h3>
+                    <p>Works seamlessly with llama.cpp and any OpenAI-compatible endpoint. Your data stays local.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>⌨️ Keyboard-Driven</h3>
+                    <p>Full keyboard navigation with vim-style bindings. Fast and efficient workflow.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>💾 Persistent Storage</h3>
+                    <p>SQLite database with FTS5 full-text search. Never lose your conversations.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔧 Tool Calling</h3>
+                    <p>Built-in tools for shell commands, file operations, and more. Extensible tool system.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🖼️ Vision Support</h3>
+                    <p>Attach images to your messages. Works with vision-capable models.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>📊 Context Engineering</h3>
+                    <p>Smart token budgeting and context management. Optimize your prompts.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🔍 Full-Text Search</h3>
+                    <p>Search across conversations and prompts with FTS5. Find anything instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <h3>🌿 Branching</h3>
+                    <p>Branch conversations and edit as branch. Explore different conversation paths.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="quick-start">
+            <h2>Quick Start</h2>
+            <div class="code-block">
+                <pre><code># Install LLM-TUI
+curl -fsSL https://raw.githubusercontent.com/klt-mm/llm-tui/main/install.sh | bash
+
+# Or build from source
+git clone https://github.com/klt-mm/llm-tui.git
+cd llm-tui
+cargo build --release
+
+# Run
+./target/release/llm-tui</code></pre>
+            </div>
+            <p>See the <a href="installation.html">Installation Guide</a> for more options.</p>
+        </section>
+
+        <section class="architecture">
+            <h2>Architecture</h2>
+            <div class="architecture-diagram">
+                <pre><code>TUI (ratatui)
+  ↓
+Application / Services (app.rs, events.rs)
+  ↓
+Domain (src/domain/)          ← must not import ratatui, sqlx, reqwest, or terminal APIs
+  ├── LLM Provider (src/llm/)
+  └── Repositories (src/persistence/)
+        ↓
+      SQLite + FTS5</code></pre>
+            </div>
+        </section>
+
+        <section class="tech-stack">
+            <h2>Tech Stack</h2>
+            <ul>
+                <li><strong>Language:</strong> Rust (edition 2024)</li>
+                <li><strong>TUI:</strong> ratatui + crossterm</li>
+                <li><strong>Async runtime:</strong> tokio</li>
+                <li><strong>Database:</strong> SQLite via sqlx (with FTS5 full-text search, migrations)</li>
+                <li><strong>HTTP / Streaming:</strong> reqwest (rustls-tls, streaming SSE)</li>
+                <li><strong>Serialization:</strong> serde / serde_json</li>
+                <li><strong>Error handling:</strong> thiserror + anyhow</li>
+                <li><strong>Logging:</strong> tracing + tracing-subscriber (env-filter)</li>
+                <li><strong>IDs:</strong> uuid v4</li>
+            </ul>
+        </section>
+
+        <section class="status">
+            <h2>Project Status</h2>
+            <div class="status-badge">
+                <span class="status-icon">✅</span>
+                <span class="status-text">Production Ready</span>
+            </div>
+            <p>All core phases (0-6) are complete. The application is stable, well-tested, and ready for production use.</p>
+            <ul>
+                <li>✅ 69+ tests passing</li>
+                <li>✅ All quality gates passing (cargo test, clippy, fmt)</li>
+                <li>✅ Comprehensive documentation</li>
+                <li>✅ Installation scripts for easy setup</li>
+            </ul>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 LLM-TUI. Released under the MIT License.</p>
+        <p>Built with ❤️ using Rust</p>
+    </footer>
+</body>
+</html>

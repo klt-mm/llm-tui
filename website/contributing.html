@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contributing - LLM-TUI</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <div class="logo">LLM-TUI</div>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="installation.html">Installation</a></li>
+                <li><a href="usage.html">Usage</a></li>
+                <li><a href="contributing.html">Contributing</a></li>
+                <li><a href="resources.html">Resources</a></li>
+                <li><a href="https://github.com/klt-mm/llm-tui" target="_blank">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="content">
+            <h1>Contributing Guide</h1>
+            
+            <p>Thank you for your interest in contributing to LLM-TUI! This guide will help you get started with contributing to the project.</p>
+
+            <h2>Code of Conduct</h2>
+            <p>Please note that this project adheres to a code of conduct. By participating, you are expected to uphold this code. Be respectful, inclusive, and constructive in all interactions.</p>
+
+            <h2>How to Contribute</h2>
+
+            <h3>Reporting Bugs</h3>
+            <p>Before creating bug reports, please check the existing issues to avoid duplicates. When creating a bug report, include:</p>
+            <ul>
+                <li>Clear and descriptive title</li>
+                <li>Steps to reproduce the issue</li>
+                <li>Expected behavior vs actual behavior</li>
+                <li>System information (OS, Rust version, etc.)</li>
+                <li>Logs (set <code>RUST_LOG=debug</code> for detailed logs)</li>
+                <li>Screenshots if applicable</li>
+            </ul>
+
+            <h3>Suggesting Features</h3>
+            <p>Feature suggestions are welcome! When suggesting a feature:</p>
+            <ul>
+                <li>Use a clear and descriptive title</li>
+                <li>Provide a detailed description of the feature</li>
+                <li>Explain why this feature would be useful</li>
+                <li>Include examples or mockups if possible</li>
+                <li>Check if similar features already exist</li>
+            </ul>
+
+            <h3>Pull Requests</h3>
+            <p>We love pull requests! Here's the process:</p>
+            <ol>
+                <li>Fork the repository</li>
+                <li>Create a feature branch (<code>git checkout -b feature/amazing-feature</code>)</li>
+                <li>Make your changes</li>
+                <li>Follow the coding standards (see below)</li>
+                <li>Write or update tests as needed</li>
+                <li>Ensure all tests pass</li>
+                <li>Commit your changes (<code>git commit -m 'Add amazing feature'</code>)</li>
+                <li>Push to the branch (<code>git push origin feature/amazing-feature</code>)</li>
+                <li>Open a Pull Request</li>
+            </ol>
+
+            <h2>Development Setup</h2>
+
+            <h3>Prerequisites</h3>
+            <ul>
+                <li>Rust 2024 edition or later</li>
+                <li>Git</li>
+                <li>SQLite development libraries</li>
+                <li>A code editor (VS Code, Vim, etc.)</li>
+            </ul>
+
+            <h3>Setting Up the Development Environment</h3>
+            <div class="code-block">
+                <pre><code># Clone your fork
+git clone https://github.com/YOUR_USERNAME/llm-tui.git
+cd llm-tui
+
+# Add upstream remote
+git remote add upstream https://github.com/klt-mm/llm-tui.git
+
+# Install development dependencies
+cargo install cargo-watch cargo-nextest
+
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Run the application
+cargo run</code></pre>
+            </div>
+
+            <h3>Development Workflow</h3>
+            <p>We recommend using <code>cargo-watch</code> for automatic rebuilding:</p>
+            <div class="code-block">
+                <pre><code># Watch for changes and rebuild
+cargo watch -x check
+
+# Watch and run tests
+cargo watch -x test
+
+# Watch, check, and run tests
+cargo watch -s "cargo check && cargo test"</code></pre>
+            </div>
+
+            <h2>Coding Standards</h2>
+
+            <h3>Rust Style Guide</h3>
+            <ul>
+                <li>Follow the official <a href="https://doc.rust-lang.org/stable/style-guide/" target="_blank">Rust Style Guide</a></li>
+                <li>Use <code>cargo fmt</code> to format code before committing</li>
+                <li>Ensure <code>cargo clippy</code> passes with no warnings</li>
+                <li>Write clear, descriptive variable and function names</li>
+                <li>Add comments for complex logic, but prefer self-documenting code</li>
+            </ul>
+
+            <h3>Code Organization</h3>
+            <p>The project follows a layered architecture:</p>
+            <div class="code-block">
+                <pre><code>TUI (ratatui)
+  ↓
+Application / Services (app.rs, events.rs)
+  ↓
+Domain (src/domain/)          ← must not import ratatui, sqlx, reqwest, or terminal APIs
+  ├── LLM Provider (src/llm/)
+  └── Repositories (src/persistence/)
+        ↓
+      SQLite + FTS5</code></pre>
+            </div>
+            <p><strong>Important:</strong> The domain layer must never depend on infrastructure crates (ratatui, sqlx, reqwest, terminal APIs).</p>
+
+            <h3>Testing</h3>
+            <p>All code changes must include appropriate tests:</p>
+            <ul>
+                <li><strong>Unit tests:</strong> For pure functions and domain logic</li>
+                <li><strong>Integration tests:</strong> For repository operations and app flows</li>
+                <li><strong>TUI tests:</strong> For UI rendering (when applicable)</li>
+            </ul>
+            <p>Run tests with:</p>
+            <div class="code-block">
+                <pre><code># Run all tests
+cargo test
+
+# Run specific test file
+cargo test --test phase6
+
+# Run with output
+cargo test -- --nocapture</code></pre>
+            </div>
+
+            <h3>Commit Messages</h3>
+            <p>Write clear, descriptive commit messages:</p>
+            <ul>
+                <li>Use the imperative mood ("Add feature" not "Added feature")</li>
+                <li>Start with a capital letter</li>
+                <li>Keep the first line under 72 characters</li>
+                <li>Include a detailed description if needed</li>
+                <li>Reference issues when applicable</li>
+            </ul>
+            <p>Example:</p>
+            <div class="code-block">
+                <pre><code>Add tool calling support for OpenAI providers
+
+- Implement ToolDefinition, ToolCall, and ToolResult domain types
+- Add ToolExecutor trait and ToolRegistry
+- Implement built-in tools: shell, read_file, write_file, list_directory
+- Add tool orchestration in app.rs
+- Add UI rendering for tool calls and results
+- Add comprehensive tests in tests/phase6.rs
+
+Closes #42</code></pre>
+            </div>
+
+            <h2>Quality Gates</h2>
+            <p>All pull requests must pass the following quality gates:</p>
+            <div class="code-block">
+                <pre><code># Format check
+cargo fmt --all -- --check
+
+# Clippy lint check
+cargo clippy --all-targets --all-features -- -D warnings
+
+# All tests
+cargo test --all-features
+
+# Build release
+cargo build --release</code></pre>
+            </div>
+            <p>These checks are also run automatically by CI on every pull request.</p>
+
+            <h2>Documentation</h2>
+            <p>When adding new features, update the relevant documentation:</p>
+            <ul>
+                <li>Update <code>README.md</code> if adding user-facing features</li>
+                <li>Update design docs in <code>docs/</code> for architectural changes</li>
+                <li>Add inline documentation for public APIs</li>
+                <li>Update the website documentation if needed</li>
+            </ul>
+
+            <h2>Architecture Decisions</h2>
+            <p>When making significant architectural decisions:</p>
+            <ul>
+                <li>Discuss in an issue first before implementing</li>
+                <li>Consider backwards compatibility</li>
+                <li>Document the rationale in the PR description</li>
+                <li>Update design docs if the architecture changes</li>
+            </ul>
+
+            <h2>Getting Help</h2>
+            <p>If you need help with your contribution:</p>
+            <ul>
+                <li>Check existing issues and discussions</li>
+                <li>Ask questions in the issue you're working on</li>
+                <li>Reach out to maintainers</li>
+            </ul>
+
+            <h2>Recognition</h2>
+            <p>All contributors are recognized in the project. Your contributions help make LLM-TUI better for everyone!</p>
+
+            <h2>License</h2>
+            <p>By contributing to LLM-TUI, you agree that your contributions will be licensed under the MIT License.</p>
+
+            <h2>Thank You!</h2>
+            <p>Thank you for contributing to LLM-TUI! Your time and effort are greatly appreciated.</p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 LLM-TUI. Released under the MIT License.</p>
+        <p>Built with ❤️ using Rust</p>
+    </footer>
+</body>
+</html>
