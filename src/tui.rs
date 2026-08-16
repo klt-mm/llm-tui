@@ -67,6 +67,12 @@ pub async fn run(app: &mut App) -> Result<()> {
                         KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             Some(UserEvent::OpenSearch)
                         }
+                        KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(UserEvent::OpenCommandPalette)
+                        }
+                        KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            Some(UserEvent::OpenGenerationSettings)
+                        }
                         KeyCode::Char('/') => Some(UserEvent::InputChar('/')),
                         KeyCode::Tab => Some(UserEvent::ToggleFocus),
                         KeyCode::Up => Some(UserEvent::NavigateUp),
@@ -408,9 +414,11 @@ fn render_modal(frame: &mut ratatui::Frame, app: &App) {
                         .add_modifier(Modifier::BOLD),
                 )),
                 Line::from("  Ctrl+N  New conversation"),
+                Line::from("  Ctrl+K  Command palette"),
                 Line::from("  Ctrl+P  Prompt picker"),
                 Line::from("  Ctrl+L  Prompt list"),
                 Line::from("  Ctrl+F  Search"),
+                Line::from("  Ctrl+G  Generation settings"),
                 Line::from("  /       Search (when input empty)"),
                 Line::from("  Ctrl+T  Test connection"),
                 Line::from("  Ctrl+M  Cycle model"),
@@ -446,22 +454,54 @@ fn render_modal(frame: &mut ratatui::Frame, app: &App) {
             frame.render_widget(ratatui::widgets::Clear, area);
             frame.render_widget(paragraph, area);
         }
-        Modal::CommandPalette { query, selected: _ } => {
-            let area = centered_rect(50, 10, frame.area());
+        Modal::CommandPalette {
+            query,
+            selected,
+            filtered,
+        } => {
+            let height = (filtered.len() + 4).min(15) as u16;
+            let area = centered_rect(50, height, frame.area());
             let block = Block::default()
-                .title(" Command Palette ")
+                .title(" Command Palette (Ctrl+K) ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan));
-            let text = vec![
-                Line::from(format!("> {}", query)),
-                Line::from(""),
-                Line::from("  (command palette not yet implemented)"),
-                Line::from(""),
-                Line::from("Press Esc to close"),
-            ];
-            let paragraph = Paragraph::new(text).block(block);
+            let inner = block.inner(area);
             frame.render_widget(ratatui::widgets::Clear, area);
-            frame.render_widget(paragraph, area);
+            frame.render_widget(block, area);
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Min(1)])
+                .split(inner);
+
+            let search =
+                Paragraph::new(format!("> {}", query)).style(Style::default().fg(Color::White));
+            frame.render_widget(search, chunks[0]);
+
+            if filtered.is_empty() {
+                let empty = Paragraph::new("  No matching commands")
+                    .style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(empty, chunks[1]);
+            } else {
+                let items: Vec<ListItem> = filtered
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cmd)| {
+                        let is_selected = i == *selected;
+                        let style = if is_selected {
+                            Style::default().fg(Color::Black).bg(Color::Cyan)
+                        } else {
+                            Style::default()
+                        };
+                        ListItem::new(Line::from(Span::styled(
+                            format!("  {}", cmd.label()),
+                            style,
+                        )))
+                    })
+                    .collect();
+                let list = List::new(items);
+                frame.render_widget(list, chunks[1]);
+            }
         }
         Modal::PromptPicker {
             query,
@@ -702,6 +742,159 @@ fn render_modal(frame: &mut ratatui::Frame, app: &App) {
                 .alignment(ratatui::layout::Alignment::Center);
             frame.render_widget(ratatui::widgets::Clear, area);
             frame.render_widget(paragraph, area);
+        }
+        Modal::ModelSelector { selected } => {
+            let height = (app.models.len() + 3).min(12) as u16;
+            let area = centered_rect(50, height, frame.area());
+            let block = Block::default()
+                .title(" Select Model ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(area);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(block, area);
+
+            if app.models.is_empty() {
+                let empty = Paragraph::new("  No models available")
+                    .style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(empty, inner);
+            } else {
+                let items: Vec<ListItem> = app
+                    .models
+                    .iter()
+                    .enumerate()
+                    .map(|(i, model)| {
+                        let is_selected = i == *selected;
+                        let is_active = app.selected_model.as_deref() == Some(&model.id);
+                        let style = if is_selected {
+                            Style::default().fg(Color::Black).bg(Color::Cyan)
+                        } else if is_active {
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default()
+                        };
+                        let marker = if is_active { "● " } else { "  " };
+                        let display = model.display_name.as_deref().unwrap_or(&model.id);
+                        ListItem::new(Line::from(Span::styled(
+                            format!("{}{}", marker, display),
+                            style,
+                        )))
+                    })
+                    .collect();
+                let list = List::new(items);
+                frame.render_widget(list, inner);
+            }
+        }
+        Modal::ProviderSelector { selected } => {
+            let height = (app.providers.len() + 3).min(10) as u16;
+            let area = centered_rect(60, height, frame.area());
+            let block = Block::default()
+                .title(" Select Provider ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(area);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(block, area);
+
+            if app.providers.is_empty() {
+                let empty = Paragraph::new("  No providers configured")
+                    .style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(empty, inner);
+            } else {
+                let items: Vec<ListItem> = app
+                    .providers
+                    .iter()
+                    .enumerate()
+                    .map(|(i, provider)| {
+                        let is_selected = i == *selected;
+                        let is_active = app.provider_id == provider.id;
+                        let style = if is_selected {
+                            Style::default().fg(Color::Black).bg(Color::Cyan)
+                        } else if is_active {
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default()
+                        };
+                        let marker = if is_active { "● " } else { "  " };
+                        let display =
+                            format!("{}{} — {}", marker, provider.name, provider.base_url);
+                        ListItem::new(Line::from(Span::styled(display, style)))
+                    })
+                    .collect();
+                let list = List::new(items);
+                frame.render_widget(list, inner);
+            }
+        }
+        Modal::GenerationSettings {
+            temperature,
+            top_p,
+            max_tokens,
+            field,
+        } => {
+            let area = centered_rect(40, 8, frame.area());
+            let block = Block::default()
+                .title(" Generation Settings (Ctrl+G) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let inner = block.inner(area);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(block, area);
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                ])
+                .split(inner);
+
+            let fields: [(&str, &String); 3] = [
+                ("Temperature", temperature),
+                ("Top P", top_p),
+                ("Max Tokens", max_tokens),
+            ];
+
+            for (i, (label, value)) in fields.iter().enumerate() {
+                let style = if i == *field {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+                let cursor = if i == *field { "▍" } else { "" };
+                let line = Line::from(vec![
+                    Span::styled(format!("  {}: ", label), style),
+                    Span::styled((*value).clone(), Style::default().fg(Color::White)),
+                    Span::styled(cursor, Style::default().fg(Color::Cyan)),
+                ]);
+                frame.render_widget(Paragraph::new(line), chunks[i]);
+            }
+
+            let hint = Line::from(vec![
+                Span::styled(
+                    "↑↓",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("=field  "),
+                Span::styled(
+                    "Enter",
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw("=save  "),
+                Span::styled("Esc", Style::default().fg(Color::Red)),
+                Span::raw("=cancel  (empty = provider default)"),
+            ]);
+            frame.render_widget(Paragraph::new(hint), chunks[4]);
         }
     }
 }

@@ -39,6 +39,7 @@ pub enum Modal {
     CommandPalette {
         query: String,
         selected: usize,
+        filtered: Vec<Command>,
     },
     PromptPicker {
         query: String,
@@ -66,6 +67,67 @@ pub enum Modal {
         prompt_id: Uuid,
         name: String,
     },
+    ModelSelector {
+        selected: usize,
+    },
+    ProviderSelector {
+        selected: usize,
+    },
+    GenerationSettings {
+        temperature: String,
+        top_p: String,
+        max_tokens: String,
+        field: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Command {
+    NewConversation,
+    Search,
+    PromptPicker,
+    PromptList,
+    ModelSelector,
+    ProviderSelector,
+    GenerationSettings,
+    TestConnection,
+    Help,
+    Quit,
+}
+
+impl Command {
+    pub const ALL: &'static [Command] = &[
+        Command::NewConversation,
+        Command::Search,
+        Command::PromptPicker,
+        Command::PromptList,
+        Command::ModelSelector,
+        Command::ProviderSelector,
+        Command::GenerationSettings,
+        Command::TestConnection,
+        Command::Help,
+        Command::Quit,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Command::NewConversation => "New Conversation",
+            Command::Search => "Search",
+            Command::PromptPicker => "Prompt Picker",
+            Command::PromptList => "Prompt List",
+            Command::ModelSelector => "Select Model",
+            Command::ProviderSelector => "Select Provider",
+            Command::GenerationSettings => "Generation Settings",
+            Command::TestConnection => "Test Connection",
+            Command::Help => "Keyboard Shortcuts",
+            Command::Quit => "Quit",
+        }
+    }
+
+    pub fn matches(&self, query: &str) -> bool {
+        let q = query.to_lowercase();
+        self.label().to_lowercase().contains(&q)
+    }
 }
 
 pub enum ActiveScreen {
@@ -93,10 +155,11 @@ pub struct App {
     pub active_screen: ActiveScreen,
     pub prompts: Vec<Prompt>,
     pub prompt_selection: usize,
+    pub providers: Vec<Provider>,
     pub search_query: String,
     pub search_results: Vec<SearchResultEntry>,
     pub search_selection: usize,
-    provider_id: Uuid,
+    pub provider_id: Uuid,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
     model_repo: Arc<dyn ModelRepository>,
@@ -148,6 +211,7 @@ impl App {
             active_screen: ActiveScreen::Chat,
             prompts: Vec::new(),
             prompt_selection: 0,
+            providers: Vec::new(),
             search_query: String::new(),
             search_results: Vec::new(),
             search_selection: 0,
@@ -200,6 +264,13 @@ impl App {
             Ok(prompts) => self.prompts = prompts,
             Err(e) => {
                 warn!(%e, "failed to load prompts");
+            }
+        }
+
+        match self.provider_repo.list().await {
+            Ok(providers) => self.providers = providers,
+            Err(e) => {
+                warn!(%e, "failed to load providers");
             }
         }
     }
@@ -264,7 +335,10 @@ impl App {
             match event {
                 UserEvent::InputChar(c) => match &mut self.modal {
                     Modal::Rename { buffer } => buffer.push(c),
-                    Modal::CommandPalette { query, .. } => query.push(c),
+                    Modal::CommandPalette { query, .. } => {
+                        query.push(c);
+                        self.refresh_command_palette_filter();
+                    }
                     Modal::PromptPicker { query, .. } => {
                         query.push(c);
                         self.refresh_prompt_picker_filter();
@@ -294,6 +368,18 @@ impl App {
                             val.push(c);
                         }
                     }
+                    Modal::GenerationSettings {
+                        temperature,
+                        top_p,
+                        max_tokens,
+                        field,
+                        ..
+                    } => match field {
+                        0 => temperature.push(c),
+                        1 => top_p.push(c),
+                        2 => max_tokens.push(c),
+                        _ => {}
+                    },
                     _ => {}
                 },
                 UserEvent::Backspace => match &mut self.modal {
@@ -302,6 +388,7 @@ impl App {
                     }
                     Modal::CommandPalette { query, .. } => {
                         query.pop();
+                        self.refresh_command_palette_filter();
                     }
                     Modal::PromptPicker { query, .. } => {
                         query.pop();
@@ -344,6 +431,24 @@ impl App {
                             val.pop();
                         }
                     }
+                    Modal::GenerationSettings {
+                        temperature,
+                        top_p,
+                        max_tokens,
+                        field,
+                        ..
+                    } => match field {
+                        0 => {
+                            temperature.pop();
+                        }
+                        1 => {
+                            top_p.pop();
+                        }
+                        2 => {
+                            max_tokens.pop();
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 },
                 UserEvent::SendMessage => {
@@ -368,6 +473,18 @@ impl App {
                     Modal::VariableInput { current, .. } => {
                         *current = current.saturating_sub(1);
                     }
+                    Modal::CommandPalette { selected, .. } => {
+                        *selected = selected.saturating_sub(1);
+                    }
+                    Modal::ModelSelector { selected } => {
+                        *selected = selected.saturating_sub(1);
+                    }
+                    Modal::ProviderSelector { selected } => {
+                        *selected = selected.saturating_sub(1);
+                    }
+                    Modal::GenerationSettings { field, .. } => {
+                        *field = field.saturating_sub(1);
+                    }
                     _ => {}
                 },
                 UserEvent::NavigateDown | UserEvent::PromptFieldNext => match &mut self.modal {
@@ -387,6 +504,25 @@ impl App {
                     } => {
                         let max = variables.len().saturating_sub(1);
                         *current = (*current + 1).min(max);
+                    }
+                    Modal::CommandPalette {
+                        selected, filtered, ..
+                    } => {
+                        if !filtered.is_empty() {
+                            let max = filtered.len().saturating_sub(1);
+                            *selected = (*selected + 1).min(max);
+                        }
+                    }
+                    Modal::ModelSelector { selected } => {
+                        let max = self.models.len().saturating_sub(1);
+                        *selected = (*selected + 1).min(max);
+                    }
+                    Modal::ProviderSelector { selected } => {
+                        let max = self.providers.len().saturating_sub(1);
+                        *selected = (*selected + 1).min(max);
+                    }
+                    Modal::GenerationSettings { field, .. } => {
+                        *field = (*field + 1).min(2);
                     }
                     _ => {}
                 },
@@ -578,7 +714,7 @@ impl App {
                 }
             }
             UserEvent::OpenCommandPalette => {
-                debug!("command palette requested (not yet implemented)");
+                self.open_command_palette();
             }
             UserEvent::NavigateUp => {
                 if matches!(self.active_screen, ActiveScreen::Search) {
@@ -641,6 +777,32 @@ impl App {
                 self.search_query.clear();
                 self.search_results.clear();
                 self.search_selection = 0;
+            }
+            UserEvent::OpenModelSelector => {
+                self.modal = Modal::ModelSelector { selected: 0 };
+            }
+            UserEvent::OpenProviderSelector => {
+                self.modal = Modal::ProviderSelector { selected: 0 };
+            }
+            UserEvent::OpenGenerationSettings => {
+                self.modal = Modal::GenerationSettings {
+                    temperature: self
+                        .generation
+                        .temperature
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    top_p: self
+                        .generation
+                        .top_p
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    max_tokens: self
+                        .generation
+                        .max_tokens
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    field: 0,
+                };
             }
             UserEvent::SearchNavigateUp => {
                 self.search_selection = self.search_selection.saturating_sub(1);
@@ -1114,9 +1276,138 @@ impl App {
                 }
                 self.modal = Modal::None;
             }
+            Modal::CommandPalette {
+                filtered, selected, ..
+            } => {
+                let cmd = filtered.get(*selected).copied();
+                self.modal = Modal::None;
+                if let Some(cmd) = cmd {
+                    self.execute_command(cmd).await;
+                }
+            }
+            Modal::ModelSelector { selected } => {
+                let sel = *selected;
+                self.modal = Modal::None;
+                if let Some(model) = self.models.get(sel) {
+                    let model_id = model.id.clone();
+                    self.select_model(model_id);
+                }
+            }
+            Modal::ProviderSelector { selected } => {
+                let sel = *selected;
+                self.modal = Modal::None;
+                if let Some(provider) = self.providers.get(sel).cloned() {
+                    let domain_provider = crate::domain::Provider {
+                        id: provider.id,
+                        name: provider.name.clone(),
+                        base_url: provider.base_url.clone(),
+                        protocol: crate::domain::ProviderProtocol::OpenAiCompatible,
+                        api_key_ref: provider.api_key_ref.clone(),
+                        default_model: provider.default_model.clone(),
+                        created_at: provider.created_at,
+                        updated_at: provider.updated_at,
+                    };
+                    match crate::llm::OpenAiCompatibleProvider::new(domain_provider) {
+                        Ok(p) => {
+                            self.provider = Arc::new(p);
+                            self.provider_id = provider.id;
+                            self.provider_name = provider.name.clone();
+                            self.refresh_models().await;
+                            debug!(name = %provider.name, "switched provider");
+                        }
+                        Err(e) => {
+                            self.error = Some(format!("Failed to switch provider: {e}"));
+                        }
+                    }
+                }
+            }
+            Modal::GenerationSettings {
+                temperature,
+                top_p,
+                max_tokens,
+                ..
+            } => {
+                self.generation.temperature = temperature.parse().ok();
+                self.generation.top_p = top_p.parse().ok();
+                self.generation.max_tokens = max_tokens.parse().ok();
+                self.modal = Modal::None;
+                debug!(
+                    temp = ?self.generation.temperature,
+                    top_p = ?self.generation.top_p,
+                    max_tokens = ?self.generation.max_tokens,
+                    "generation settings updated"
+                );
+            }
             _ => {
                 self.modal = Modal::None;
             }
+        }
+    }
+
+    fn open_command_palette(&mut self) {
+        let filtered = Command::ALL.to_vec();
+        self.modal = Modal::CommandPalette {
+            query: String::new(),
+            selected: 0,
+            filtered,
+        };
+    }
+
+    fn refresh_command_palette_filter(&mut self) {
+        if let Modal::CommandPalette {
+            query,
+            selected,
+            filtered,
+        } = &mut self.modal
+        {
+            let q = query.to_lowercase();
+            *filtered = Command::ALL
+                .iter()
+                .filter(|cmd| q.is_empty() || cmd.matches(&q))
+                .copied()
+                .collect();
+            if *selected >= filtered.len() {
+                *selected = filtered.len().saturating_sub(1);
+            }
+        }
+    }
+
+    async fn execute_command(&mut self, cmd: Command) {
+        match cmd {
+            Command::NewConversation => self.new_conversation().await,
+            Command::Search => {
+                self.active_screen = ActiveScreen::Search;
+                self.search_query.clear();
+                self.search_results.clear();
+                self.search_selection = 0;
+            }
+            Command::PromptPicker => self.open_prompt_picker(),
+            Command::PromptList => self.active_screen = ActiveScreen::Prompts,
+            Command::ModelSelector => self.modal = Modal::ModelSelector { selected: 0 },
+            Command::ProviderSelector => self.modal = Modal::ProviderSelector { selected: 0 },
+            Command::GenerationSettings => {
+                self.modal = Modal::GenerationSettings {
+                    temperature: self
+                        .generation
+                        .temperature
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    top_p: self
+                        .generation
+                        .top_p
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    max_tokens: self
+                        .generation
+                        .max_tokens
+                        .map(|t| format!("{t}"))
+                        .unwrap_or_default(),
+                    field: 0,
+                };
+            }
+            Command::TestConnection => self.test_connection().await,
+            Command::Help => self.modal = Modal::Help,
+            Command::Quit => self.should_quit = true,
         }
     }
 
