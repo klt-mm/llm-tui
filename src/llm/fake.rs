@@ -7,6 +7,12 @@ use crate::llm::provider::{ChatRequest, ChatResponse, LlmError, LlmProvider, Str
 
 pub struct FakeProvider;
 
+impl Default for FakeProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FakeProvider {
     pub fn new() -> Self {
         Self
@@ -14,12 +20,50 @@ impl FakeProvider {
 }
 
 const FAKE_TOKENS: &[&str] = &[
-    "The ", "quick ", "brown ", "fox ", "jumps ", "over ", "the ", "lazy ", "dog. ",
-    "This ", "is ", "a ", "fake ", "response ", "from ", "the ", "test ", "provider. ",
-    "It ", "streams ", "tokens ", "one ", "by ", "one ", "to ", "simulate ",
-    "real ", "LLM ", "behavior. ", "You ", "can ", "use ", "this ", "for ",
-    "testing ", "the ", "TUI ", "without ", "a ", "real ", "model. ",
-    "Have ", "fun! ", "🦊",
+    "The ",
+    "quick ",
+    "brown ",
+    "fox ",
+    "jumps ",
+    "over ",
+    "the ",
+    "lazy ",
+    "dog. ",
+    "This ",
+    "is ",
+    "a ",
+    "fake ",
+    "response ",
+    "from ",
+    "the ",
+    "test ",
+    "provider. ",
+    "It ",
+    "streams ",
+    "tokens ",
+    "one ",
+    "by ",
+    "one ",
+    "to ",
+    "simulate ",
+    "real ",
+    "LLM ",
+    "behavior. ",
+    "You ",
+    "can ",
+    "use ",
+    "this ",
+    "for ",
+    "testing ",
+    "the ",
+    "TUI ",
+    "without ",
+    "a ",
+    "real ",
+    "model. ",
+    "Have ",
+    "fun! ",
+    "🦊",
 ];
 
 #[async_trait]
@@ -94,7 +138,11 @@ impl LlmProvider for FakeProvider {
                     _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => {}
                 }
 
-                if tx.send(Ok(StreamEvent::Delta(token.to_string()))).await.is_err() {
+                if tx
+                    .send(Ok(StreamEvent::Delta(token.to_string())))
+                    .await
+                    .is_err()
+                {
                     return;
                 }
             }

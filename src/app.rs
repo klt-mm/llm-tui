@@ -49,6 +49,7 @@ pub struct App {
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         provider: Arc<dyn LlmProvider>,
         provider_name: String,
@@ -131,14 +132,14 @@ impl App {
             }
             Err(e) => {
                 warn!(%e, "failed to load models");
-                if let Ok(cached) = self.model_repo.list_for_provider(self.provider_id).await {
-                    if !cached.is_empty() {
-                        self.models = cached;
-                        if let Some(first) = self.models.first() {
-                            self.selected_model = Some(first.id.clone());
-                        }
-                        return;
+                if let Ok(cached) = self.model_repo.list_for_provider(self.provider_id).await
+                    && !cached.is_empty()
+                {
+                    self.models = cached;
+                    if let Some(first) = self.models.first() {
+                        self.selected_model = Some(first.id.clone());
                     }
+                    return;
                 }
                 self.error = Some(format!("Failed to load models: {e}"));
             }
@@ -228,7 +229,11 @@ impl App {
                     // Cycle to next model
                     if !self.models.is_empty() {
                         let current = self.selected_model.as_deref().unwrap_or("");
-                        let pos = self.models.iter().position(|m| m.id == current).unwrap_or(0);
+                        let pos = self
+                            .models
+                            .iter()
+                            .position(|m| m.id == current)
+                            .unwrap_or(0);
                         let next = (pos + 1) % self.models.len();
                         let model_id = self.models[next].id.clone();
                         self.select_model(model_id);
@@ -259,12 +264,12 @@ impl App {
             }
             UserEvent::ToggleFocus => {
                 self.sidebar_focus = !self.sidebar_focus;
-                if self.sidebar_focus && !self.conversations.is_empty() {
-                    if let Some(active_id) = self.active_conversation {
-                        if let Some(pos) = self.conversations.iter().position(|c| c.id == active_id) {
-                            self.sidebar_selection = pos;
-                        }
-                    }
+                if self.sidebar_focus
+                    && !self.conversations.is_empty()
+                    && let Some(active_id) = self.active_conversation
+                    && let Some(pos) = self.conversations.iter().position(|c| c.id == active_id)
+                {
+                    self.sidebar_selection = pos;
                 }
             }
         }
@@ -283,18 +288,18 @@ impl App {
                 });
             }
             ProviderEvent::Delta { message_id, text } => {
-                if let Some(ref mut state) = self.streaming {
-                    if state.message_id == message_id {
-                        state.buffer.push_str(&text);
-                    }
+                if let Some(ref mut state) = self.streaming
+                    && state.message_id == message_id
+                {
+                    state.buffer.push_str(&text);
                 }
             }
             ProviderEvent::ReasoningDelta { .. } => {}
             ProviderEvent::Usage { message_id, usage } => {
-                if let Some(ref mut state) = self.streaming {
-                    if state.message_id == message_id {
-                        state.usage = Some(usage);
-                    }
+                if let Some(ref mut state) = self.streaming
+                    && state.message_id == message_id
+                {
+                    state.usage = Some(usage);
                 }
             }
             ProviderEvent::Completed { message } => {
@@ -534,10 +539,10 @@ impl App {
             None => return,
         };
 
-        if let Some(last) = self.messages.last() {
-            if last.role == Role::Assistant {
-                self.messages.pop();
-            }
+        if let Some(last) = self.messages.last()
+            && last.role == Role::Assistant
+        {
+            self.messages.pop();
         }
 
         self.start_generation(conversation_id).await;
@@ -547,12 +552,17 @@ impl App {
         let Some(conversation_id) = self.active_conversation else {
             return;
         };
-        if let Some(conv) = self.conversations.iter_mut().find(|c| c.id == conversation_id) {
+        if let Some(conv) = self
+            .conversations
+            .iter_mut()
+            .find(|c| c.id == conversation_id)
+        {
             conv.updated_at = Utc::now();
-            if self.messages.len() == 2 && conv.title == "New Conversation" {
-                if let Some(user_msg) = self.messages.iter().find(|m| m.role == Role::User) {
-                    conv.title = user_msg.content.chars().take(50).collect();
-                }
+            if self.messages.len() == 2
+                && conv.title == "New Conversation"
+                && let Some(user_msg) = self.messages.iter().find(|m| m.role == Role::User)
+            {
+                conv.title = user_msg.content.chars().take(50).collect();
             }
         }
     }
@@ -564,7 +574,9 @@ impl App {
     pub fn streaming_stats(&self) -> Option<(usize, f64)> {
         self.streaming.as_ref().map(|s| {
             let elapsed = s.started_at.elapsed().as_secs_f64();
-            let tokens = s.usage.as_ref()
+            let tokens = s
+                .usage
+                .as_ref()
                 .and_then(|u| u.completion_tokens)
                 .unwrap_or(0) as usize;
             (tokens, elapsed)

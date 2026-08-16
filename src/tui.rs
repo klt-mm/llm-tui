@@ -4,15 +4,15 @@ use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Terminal,
 };
 use tokio::sync::mpsc;
 
@@ -103,20 +103,14 @@ pub async fn run(app: &mut App) -> Result<()> {
 fn render(frame: &mut ratatui::Frame, app: &App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(1),
-        ])
+        .constraints([Constraint::Length(1), Constraint::Min(1)])
         .split(frame.area());
 
     render_status_bar(frame, app, main_chunks[0]);
 
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(25),
-            Constraint::Min(1),
-        ])
+        .constraints([Constraint::Length(25), Constraint::Min(1)])
         .split(main_chunks[1]);
 
     render_sidebar(frame, app, content_chunks[0]);
@@ -150,11 +144,13 @@ fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layou
     let line = Line::from(vec![
         Span::styled(
             " llm-tui ",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::raw("| "),
         Span::styled(
-            format!("{} ", &app.provider_name),
+            format!("{} ", app.provider_name),
             Style::default().fg(Color::Yellow),
         ),
         Span::raw(format!("| {model}{streaming_info}")),
@@ -200,7 +196,9 @@ fn render_sidebar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::
             let style = if is_selected && app.sidebar_focus {
                 Style::default().fg(Color::Black).bg(Color::Cyan)
             } else if is_active {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
@@ -222,10 +220,7 @@ fn render_sidebar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::
 fn render_main(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(3),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
         .split(area);
 
     render_chat(frame, app, chunks[0]);
@@ -261,22 +256,22 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
         lines.push(Line::from(""));
     }
 
-    if let Some(buffer) = app.streaming_content() {
-        if !buffer.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "── assistant ──",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            for text_line in buffer.lines() {
-                lines.push(Line::from(text_line.to_string()));
-            }
-            lines.push(Line::from(Span::styled(
-                "▍",
-                Style::default().fg(Color::Cyan),
-            )));
+    if let Some(buffer) = app.streaming_content()
+        && !buffer.is_empty()
+    {
+        lines.push(Line::from(Span::styled(
+            "── assistant ──",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )));
+        for text_line in buffer.lines() {
+            lines.push(Line::from(text_line.to_string()));
         }
+        lines.push(Line::from(Span::styled(
+            "▍",
+            Style::default().fg(Color::Cyan),
+        )));
     }
 
     let paragraph = Paragraph::new(lines)

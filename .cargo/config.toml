@@ -1,0 +1,15 @@
+[alias]
+# Quality gates
+check-all = "clippy --all-targets --all-features -- -D warnings"
+fmt-check = "fmt --all -- --check"
+
+# Testing
+t = "test"
+tw = "test -- --nocapture"
+
+# Development
+r = "run"
+rd = "run 2>&1 | head -50"
+
+# Build
+br = "build --release"

@@ -17,10 +17,7 @@ use llm_tui::persistence::{
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "llm_tui=debug".to_string()),
-        )
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "llm_tui=debug".to_string()))
         .init();
 
     let database_url =

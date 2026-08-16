@@ -52,10 +52,14 @@ impl OpenAiCompatibleProvider {
 }
 
 #[derive(Deserialize)]
-struct ModelsResponse { data: Vec<ModelItem> }
+struct ModelsResponse {
+    data: Vec<ModelItem>,
+}
 
 #[derive(Deserialize)]
-struct ModelItem { id: String }
+struct ModelItem {
+    id: String,
+}
 
 #[derive(Serialize)]
 struct ChatBody<'a> {
@@ -80,10 +84,14 @@ impl<'a> ChatBody<'a> {
     fn from_request(req: &'a ChatRequest) -> Self {
         Self {
             model: &req.model,
-            messages: req.messages.iter().map(|m| ChatMessage {
-                role: OpenAiCompatibleProvider::role(&m.role),
-                content: &m.content,
-            }).collect(),
+            messages: req
+                .messages
+                .iter()
+                .map(|m| ChatMessage {
+                    role: OpenAiCompatibleProvider::role(&m.role),
+                    content: &m.content,
+                })
+                .collect(),
             stream: true,
             temperature: req.generation.temperature,
             top_p: req.generation.top_p,
@@ -96,20 +104,29 @@ impl<'a> ChatBody<'a> {
 impl LlmProvider for OpenAiCompatibleProvider {
     async fn models(&self) -> Result<Vec<Model>, LlmError> {
         let req = self.client.get(self.endpoint("/models"));
-        let response = self.auth(req).send().await
+        let response = self
+            .auth(req)
+            .send()
+            .await
             .map_err(|e| LlmError::Network(e.to_string()))?
             .error_for_status()
             .map_err(|e| LlmError::Provider(e.to_string()))?;
 
-        let body: ModelsResponse = response.json().await
+        let body: ModelsResponse = response
+            .json()
+            .await
             .map_err(|e| LlmError::Provider(e.to_string()))?;
 
-        Ok(body.data.into_iter().map(|m| Model {
-            id: m.id,
-            display_name: None,
-            context_length: None,
-            metadata: serde_json::json!({}),
-        }).collect())
+        Ok(body
+            .data
+            .into_iter()
+            .map(|m| Model {
+                id: m.id,
+                display_name: None,
+                context_length: None,
+                metadata: serde_json::json!({}),
+            })
+            .collect())
     }
 
     async fn capabilities(&self) -> Result<Capabilities, LlmError> {
@@ -146,8 +163,14 @@ impl LlmProvider for OpenAiCompatibleProvider {
         cancel: CancellationToken,
     ) -> Result<mpsc::Receiver<Result<StreamEvent, LlmError>>, LlmError> {
         let body = ChatBody::from_request(&request);
-        let req = self.client.post(self.endpoint("/chat/completions")).json(&body);
-        let response = self.auth(req).send().await
+        let req = self
+            .client
+            .post(self.endpoint("/chat/completions"))
+            .json(&body);
+        let response = self
+            .auth(req)
+            .send()
+            .await
             .map_err(|e| LlmError::Network(e.to_string()))?
             .error_for_status()
             .map_err(|e| LlmError::Provider(e.to_string()))?;
@@ -180,11 +203,10 @@ impl LlmProvider for OpenAiCompatibleProvider {
                                         let parsed: Result<serde_json::Value, _> = serde_json::from_str(data);
                                         let Ok(value) = parsed else { continue };
 
-                                        if let Some(text) = value["choices"][0]["delta"]["content"].as_str() {
-                                            if tx.send(Ok(StreamEvent::Delta(text.to_string()))).await.is_err() {
+                                        if let Some(text) = value["choices"][0]["delta"]["content"].as_str()
+                                            && tx.send(Ok(StreamEvent::Delta(text.to_string()))).await.is_err() {
                                                 return;
                                             }
-                                        }
                                     }
                                 }
                             }

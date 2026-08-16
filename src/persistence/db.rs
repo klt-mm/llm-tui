@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 #[derive(Clone)]
 pub struct Database {

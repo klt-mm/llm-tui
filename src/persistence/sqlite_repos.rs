@@ -55,10 +55,8 @@ impl ProviderRepository for SqliteProviderRepository {
 }
 
 fn row_to_provider(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Provider> {
-    let protocol_str: String = row.try_get("protocol")?;
-    let protocol = match protocol_str.as_str() {
-        _ => ProviderProtocol::OpenAiCompatible,
-    };
+    let _protocol_str: String = row.try_get("protocol")?;
+    let protocol = ProviderProtocol::OpenAiCompatible;
     Ok(Provider {
         id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
         name: row.try_get("name")?,
@@ -139,8 +137,7 @@ fn row_to_conversation(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Conversa
             .map(|dt| dt.with_timezone(&chrono::Utc))?,
         archived_at: archived_at
             .map(|s| {
-                chrono::DateTime::parse_from_rfc3339(&s)
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                chrono::DateTime::parse_from_rfc3339(&s).map(|dt| dt.with_timezone(&chrono::Utc))
             })
             .transpose()?,
     })
@@ -196,16 +193,12 @@ impl MessageRepository for SqliteMessageRepository {
         Ok(())
     }
 
-    async fn list_for_conversation(
-        &self,
-        conversation_id: Uuid,
-    ) -> anyhow::Result<Vec<Message>> {
-        let rows = sqlx::query(
-            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at",
-        )
-        .bind(conversation_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
+    async fn list_for_conversation(&self, conversation_id: Uuid) -> anyhow::Result<Vec<Message>> {
+        let rows =
+            sqlx::query("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at")
+                .bind(conversation_id.to_string())
+                .fetch_all(&self.pool)
+                .await?;
         rows.iter().map(row_to_message).collect()
     }
 }
@@ -226,9 +219,7 @@ fn row_to_message(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Message> {
     Ok(Message {
         id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
         conversation_id: Uuid::parse_str(&row.try_get::<String, _>("conversation_id")?)?,
-        parent_id: parent_id
-            .map(|s| Uuid::parse_str(&s))
-            .transpose()?,
+        parent_id: parent_id.map(|s| Uuid::parse_str(&s)).transpose()?,
         role,
         content: row.try_get("content")?,
         reasoning_content: row.try_get("reasoning_content")?,
@@ -280,12 +271,10 @@ impl ModelRepository for SqliteModelRepository {
     }
 
     async fn list_for_provider(&self, provider_id: Uuid) -> anyhow::Result<Vec<Model>> {
-        let rows = sqlx::query(
-            "SELECT * FROM models WHERE provider_id = ? ORDER BY model_id",
-        )
-        .bind(provider_id.to_string())
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query("SELECT * FROM models WHERE provider_id = ? ORDER BY model_id")
+            .bind(provider_id.to_string())
+            .fetch_all(&self.pool)
+            .await?;
 
         rows.iter().map(row_to_model).collect()
     }

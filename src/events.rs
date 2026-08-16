@@ -23,12 +23,28 @@ pub enum UserEvent {
 pub enum ProviderEvent {
     ModelsLoaded(Vec<Model>),
     CapabilitiesLoaded(Capabilities),
-    StreamStarted { message_id: Uuid },
-    Delta { message_id: Uuid, text: String },
-    ReasoningDelta { message_id: Uuid, text: String },
-    Usage { message_id: Uuid, usage: GenerationUsage },
-    Completed { message: Message },
-    Failed { message_id: Uuid, error: String },
+    StreamStarted {
+        message_id: Uuid,
+    },
+    Delta {
+        message_id: Uuid,
+        text: String,
+    },
+    ReasoningDelta {
+        message_id: Uuid,
+        text: String,
+    },
+    Usage {
+        message_id: Uuid,
+        usage: GenerationUsage,
+    },
+    Completed {
+        message: Message,
+    },
+    Failed {
+        message_id: Uuid,
+        error: String,
+    },
 }
 
 #[derive(Debug)]

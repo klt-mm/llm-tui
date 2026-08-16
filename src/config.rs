@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub provider: ProviderConfig,
@@ -9,7 +9,7 @@ pub struct Config {
     pub generation: GenerationConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct ProviderConfig {
     pub name: Option<String>,
     pub base_url: Option<String>,
@@ -17,41 +17,11 @@ pub struct ProviderConfig {
     pub default_model: Option<String>,
 }
 
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            name: None,
-            base_url: None,
-            api_key: None,
-            default_model: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct GenerationConfig {
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
-}
-
-impl Default for GenerationConfig {
-    fn default() -> Self {
-        Self {
-            temperature: None,
-            top_p: None,
-            max_tokens: None,
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            provider: ProviderConfig::default(),
-            generation: GenerationConfig::default(),
-        }
-    }
 }
 
 impl Config {

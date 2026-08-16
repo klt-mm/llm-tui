@@ -165,7 +165,10 @@ async fn test_connection_succeeds_with_fake_provider() {
     app.init().await;
 
     app.test_connection().await;
-    assert!(app.error.is_none(), "connection should succeed with fake provider");
+    assert!(
+        app.error.is_none(),
+        "connection should succeed with fake provider"
+    );
     assert!(!app.models.is_empty(), "models should be loaded");
 }
 
@@ -182,10 +185,12 @@ async fn select_model_by_index() {
 
     assert!(app.models.len() >= 2);
 
-    app.handle_event(AppEvent::User(UserEvent::SelectModel(1))).await;
+    app.handle_event(AppEvent::User(UserEvent::SelectModel(1)))
+        .await;
     assert_eq!(app.selected_model.as_deref(), Some("fake-slow"));
 
-    app.handle_event(AppEvent::User(UserEvent::SelectModel(0))).await;
+    app.handle_event(AppEvent::User(UserEvent::SelectModel(0)))
+        .await;
     assert_eq!(app.selected_model.as_deref(), Some("fake-fast"));
 }
 
@@ -198,11 +203,13 @@ async fn cycle_models_with_ctrl_m() {
 
     let first_model = app.selected_model.clone().unwrap();
 
-    app.handle_event(AppEvent::User(UserEvent::SelectModel(usize::MAX))).await;
+    app.handle_event(AppEvent::User(UserEvent::SelectModel(usize::MAX)))
+        .await;
     let second_model = app.selected_model.clone().unwrap();
     assert_ne!(first_model, second_model);
 
-    app.handle_event(AppEvent::User(UserEvent::SelectModel(usize::MAX))).await;
+    app.handle_event(AppEvent::User(UserEvent::SelectModel(usize::MAX)))
+        .await;
     let third_model = app.selected_model.clone().unwrap();
     assert_ne!(second_model, third_model);
 }
@@ -240,9 +247,12 @@ async fn generation_config_passed_to_chat_request() {
     );
     app.init().await;
 
-    app.handle_event(AppEvent::User(UserEvent::NewConversation)).await;
-    app.handle_event(AppEvent::User(UserEvent::InputChar('h'))).await;
-    app.handle_event(AppEvent::User(UserEvent::SendMessage)).await;
+    app.handle_event(AppEvent::User(UserEvent::NewConversation))
+        .await;
+    app.handle_event(AppEvent::User(UserEvent::InputChar('h')))
+        .await;
+    app.handle_event(AppEvent::User(UserEvent::SendMessage))
+        .await;
 
     let mut completed = false;
     for _ in 0..200 {
@@ -256,7 +266,9 @@ async fn generation_config_passed_to_chat_request() {
             }
             _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => {}
         }
-        if completed { break; }
+        if completed {
+            break;
+        }
     }
     assert!(completed, "generation should complete");
 }
@@ -272,9 +284,12 @@ async fn streaming_stats_available_during_generation() {
     let mut app = make_app(&db, event_tx.clone());
     app.init().await;
 
-    app.handle_event(AppEvent::User(UserEvent::NewConversation)).await;
-    app.handle_event(AppEvent::User(UserEvent::InputChar('t'))).await;
-    app.handle_event(AppEvent::User(UserEvent::SendMessage)).await;
+    app.handle_event(AppEvent::User(UserEvent::NewConversation))
+        .await;
+    app.handle_event(AppEvent::User(UserEvent::InputChar('t')))
+        .await;
+    app.handle_event(AppEvent::User(UserEvent::SendMessage))
+        .await;
 
     // Wait for at least one delta
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;

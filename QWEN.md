@@ -89,6 +89,55 @@ The domain layer must never depend on infrastructure crates.
 
 Run tests: `cargo test`
 
+## CI & Quality Gates
+
+GitHub Actions runs on every push/PR to `main`:
+
+| Job | Check |
+|-----|-------|
+| `fmt` | `cargo fmt --all -- --check` |
+| `clippy` | `cargo clippy --all-targets --all-features -- -D warnings` |
+| `test` | `cargo test --all-features` |
+| `build` | `cargo build --release` |
+| `audit` | `rustsec/audit-check` (dependency security) |
+
+All gates must pass before merge. Run locally before pushing:
+
+```bash
+cargo fmt --all
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+```
+
+## Workflow Tools
+
+### Cargo aliases (`.cargo/config.toml`)
+
+```bash
+cargo check-all    # clippy with -D warnings
+cargo fmt-check    # fmt --check
+cargo t            # test
+cargo tw           # test -- --nocapture
+cargo r            # run
+cargo br           # build --release
+```
+
+### Recommended dev tools
+
+| Tool | Install | Purpose |
+|------|---------|---------|
+| `cargo-watch` | `cargo install cargo-watch` | Auto-rebuild on file changes |
+| `cargo-nextest` | `cargo install cargo-nextest` | Faster test runner |
+| `cargo-llvm-cov` | `cargo install cargo-llvm-cov` | Test coverage |
+| `cargo-audit` | `cargo install cargo-audit` | Dependency security scanning |
+
+### TDD workflow
+
+```bash
+cargo watch -x test           # re-run tests on every save
+cargo watch -s "cargo fmt --all && cargo clippy -- -D warnings && cargo test"
+```
+
 ## Key Docs
 
 See `docs/` for detailed design contracts:
