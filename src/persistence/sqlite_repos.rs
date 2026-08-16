@@ -121,6 +121,24 @@ impl ConversationRepository for SqliteConversationRepository {
         .await?;
         rows.iter().map(row_to_conversation).collect()
     }
+
+    async fn update(&self, conversation: &Conversation) -> anyhow::Result<()> {
+        sqlx::query("UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?")
+            .bind(&conversation.title)
+            .bind(conversation.updated_at.to_rfc3339())
+            .bind(conversation.id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM conversations WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 fn row_to_conversation(row: &sqlx::sqlite::SqliteRow) -> anyhow::Result<Conversation> {

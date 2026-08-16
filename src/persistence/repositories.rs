@@ -13,6 +13,8 @@ pub trait ConversationRepository {
     async fn create(&self, conversation: &Conversation) -> anyhow::Result<()>;
     async fn get(&self, id: Uuid) -> anyhow::Result<Option<Conversation>>;
     async fn list(&self) -> anyhow::Result<Vec<Conversation>>;
+    async fn update(&self, conversation: &Conversation) -> anyhow::Result<()>;
+    async fn delete(&self, id: Uuid) -> anyhow::Result<()>;
 }
 
 #[async_trait]

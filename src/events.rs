@@ -17,6 +17,11 @@ pub enum UserEvent {
     NavigateDown,
     OpenSelected,
     ToggleFocus,
+    StartRename,
+    StartDelete,
+    ConfirmAction,
+    CancelModal,
+    OpenHelp,
 }
 
 #[derive(Debug)]

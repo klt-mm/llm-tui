@@ -16,9 +16,10 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 
-use llm_tui::app::App;
+use llm_tui::app::{App, Modal};
 use llm_tui::domain::Role;
 use llm_tui::events::{AppEvent, UserEvent};
+use llm_tui::markdown::render_markdown;
 
 pub async fn run(app: &mut App) -> Result<()> {
     enable_raw_mode()?;
@@ -60,6 +61,8 @@ pub async fn run(app: &mut App) -> Result<()> {
                         KeyCode::Tab => Some(UserEvent::ToggleFocus),
                         KeyCode::Up => Some(UserEvent::NavigateUp),
                         KeyCode::Down => Some(UserEvent::NavigateDown),
+                        KeyCode::Enter => Some(UserEvent::SendMessage),
+                        KeyCode::Char('?') => Some(UserEvent::OpenHelp),
                         KeyCode::Char(c @ '1'..='9') => {
                             let idx = (c as usize) - ('1' as usize);
                             Some(UserEvent::SelectModel(idx))
@@ -115,6 +118,9 @@ fn render(frame: &mut ratatui::Frame, app: &App) {
 
     render_sidebar(frame, app, content_chunks[0]);
     render_main(frame, app, content_chunks[1]);
+
+    // Render modal overlay if active
+    render_modal(frame, app);
 }
 
 fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rect) {
@@ -250,8 +256,14 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         )));
 
-        for text_line in msg.content.lines() {
-            lines.push(Line::from(text_line.to_string()));
+        // Use markdown rendering for assistant messages
+        if msg.role == Role::Assistant {
+            let md_lines = render_markdown(&msg.content);
+            lines.extend(md_lines);
+        } else {
+            for text_line in msg.content.lines() {
+                lines.push(Line::from(text_line.to_string()));
+            }
         }
         lines.push(Line::from(""));
     }
@@ -265,9 +277,9 @@ fn render_chat(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Rec
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )));
-        for text_line in buffer.lines() {
-            lines.push(Line::from(text_line.to_string()));
-        }
+        // Use markdown rendering for streaming content
+        let md_lines = render_markdown(buffer);
+        lines.extend(md_lines);
         lines.push(Line::from(Span::styled(
             "▍",
             Style::default().fg(Color::Cyan),
@@ -309,4 +321,138 @@ fn render_input(frame: &mut ratatui::Frame, app: &App, area: ratatui::layout::Re
             Style::default().fg(Color::White)
         });
     frame.render_widget(input, area);
+}
+
+fn render_modal(frame: &mut ratatui::Frame, app: &App) {
+    match &app.modal {
+        Modal::None => {}
+        Modal::Rename { buffer } => {
+            let area = centered_rect(40, 3, frame.area());
+            let block = Block::default()
+                .title(" Rename Conversation ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let paragraph = Paragraph::new(buffer.as_str())
+                .block(block)
+                .style(Style::default().fg(Color::White));
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(paragraph, area);
+        }
+        Modal::DeleteConfirm { title, .. } => {
+            let area = centered_rect(50, 5, frame.area());
+            let block = Block::default()
+                .title(" Delete Conversation ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red));
+            let text = vec![
+                Line::from(format!("Delete \"{}\"?", title)),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled(
+                        "Enter",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" = confirm  "),
+                    Span::styled(
+                        "Esc",
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" = cancel"),
+                ]),
+            ];
+            let paragraph = Paragraph::new(text)
+                .block(block)
+                .alignment(ratatui::layout::Alignment::Center);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(paragraph, area);
+        }
+        Modal::Help => {
+            let area = centered_rect(60, 20, frame.area());
+            let block = Block::default()
+                .title(" Keyboard Shortcuts ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let text = vec![
+                Line::from(Span::styled(
+                    "Global",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from("  Ctrl+N  New conversation"),
+                Line::from("  Ctrl+T  Test connection"),
+                Line::from("  Ctrl+M  Cycle model"),
+                Line::from("  Ctrl+R  Retry generation"),
+                Line::from("  Alt+C   Cancel generation"),
+                Line::from("  ?       Show this help"),
+                Line::from("  Esc     Quit / Close modal"),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Sidebar (Tab to focus)",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from("  j/k     Navigate conversations"),
+                Line::from("  ↑/↓     Navigate conversations"),
+                Line::from("  Enter   Open conversation"),
+                Line::from("  r       Rename conversation"),
+                Line::from("  d       Delete conversation"),
+                Line::from("  1-9     Select model"),
+                Line::from(""),
+                Line::from(Span::styled(
+                    "Chat (Tab to focus)",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )),
+                Line::from("  Enter   Send message"),
+                Line::from("  Esc     Quit"),
+            ];
+            let paragraph = Paragraph::new(text).block(block);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(paragraph, area);
+        }
+        Modal::CommandPalette { query, selected: _ } => {
+            let area = centered_rect(50, 10, frame.area());
+            let block = Block::default()
+                .title(" Command Palette ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan));
+            let text = vec![
+                Line::from(format!("> {}", query)),
+                Line::from(""),
+                Line::from("  (command palette not yet implemented)"),
+                Line::from(""),
+                Line::from("Press Esc to close"),
+            ];
+            let paragraph = Paragraph::new(text).block(block);
+            frame.render_widget(ratatui::widgets::Clear, area);
+            frame.render_widget(paragraph, area);
+        }
+    }
+}
+
+fn centered_rect(percent_x: u16, height: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length((r.height.saturating_sub(height)) / 2),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(r);
+
+    let horizontal_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1]);
+
+    horizontal_layout[1]
 }

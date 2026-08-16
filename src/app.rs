@@ -25,6 +25,22 @@ pub struct StreamingState {
     pub usage: Option<GenerationUsage>,
 }
 
+pub enum Modal {
+    None,
+    Rename {
+        buffer: String,
+    },
+    DeleteConfirm {
+        conversation_id: Uuid,
+        title: String,
+    },
+    Help,
+    CommandPalette {
+        query: String,
+        selected: usize,
+    },
+}
+
 pub struct App {
     pub provider: Arc<dyn LlmProvider>,
     pub provider_name: String,
@@ -40,6 +56,7 @@ pub struct App {
     pub generation: GenerationConfig,
     pub sidebar_focus: bool,
     pub sidebar_selection: usize,
+    pub modal: Modal,
     provider_id: Uuid,
     conversation_repo: Arc<dyn ConversationRepository>,
     message_repo: Arc<dyn MessageRepository>,
@@ -75,6 +92,7 @@ impl App {
             generation,
             sidebar_focus: false,
             sidebar_selection: 0,
+            modal: Modal::None,
             provider_id: Uuid::nil(),
             conversation_repo,
             message_repo,
@@ -175,6 +193,36 @@ impl App {
     }
 
     async fn handle_user_event(&mut self, event: UserEvent) {
+        // Handle modal input first
+        if !matches!(self.modal, Modal::None) {
+            match event {
+                UserEvent::InputChar(c) => match &mut self.modal {
+                    Modal::Rename { buffer } => buffer.push(c),
+                    Modal::CommandPalette { query, .. } => query.push(c),
+                    _ => {}
+                },
+                UserEvent::Backspace => match &mut self.modal {
+                    Modal::Rename { buffer } => {
+                        buffer.pop();
+                    }
+                    Modal::CommandPalette { query, .. } => {
+                        query.pop();
+                    }
+                    _ => {}
+                },
+                UserEvent::SendMessage => {
+                    // Enter confirms the modal action
+                    self.confirm_modal().await;
+                }
+                UserEvent::Quit => {
+                    // Esc cancels the modal
+                    self.modal = Modal::None;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         match event {
             UserEvent::Quit => {
                 self.should_quit = true;
@@ -190,6 +238,12 @@ impl App {
                         }
                         'k' => {
                             self.sidebar_selection = self.sidebar_selection.saturating_sub(1);
+                        }
+                        'r' => {
+                            self.start_rename();
+                        }
+                        'd' => {
+                            self.start_delete();
                         }
                         'q' => {
                             self.should_quit = true;
@@ -271,6 +325,25 @@ impl App {
                 {
                     self.sidebar_selection = pos;
                 }
+            }
+            UserEvent::StartRename => {
+                if self.sidebar_focus {
+                    self.start_rename();
+                }
+            }
+            UserEvent::StartDelete => {
+                if self.sidebar_focus {
+                    self.start_delete();
+                }
+            }
+            UserEvent::ConfirmAction => {
+                self.confirm_modal().await;
+            }
+            UserEvent::CancelModal => {
+                self.modal = Modal::None;
+            }
+            UserEvent::OpenHelp => {
+                self.modal = Modal::Help;
             }
         }
     }
@@ -601,6 +674,57 @@ impl App {
                 Err(e) => {
                     self.error = Some(format!("Failed to load messages: {e}"));
                 }
+            }
+        }
+    }
+
+    fn start_rename(&mut self) {
+        if let Some(conv) = self.conversations.get(self.sidebar_selection) {
+            self.modal = Modal::Rename {
+                buffer: conv.title.clone(),
+            };
+        }
+    }
+
+    fn start_delete(&mut self) {
+        if let Some(conv) = self.conversations.get(self.sidebar_selection) {
+            self.modal = Modal::DeleteConfirm {
+                conversation_id: conv.id,
+                title: conv.title.clone(),
+            };
+        }
+    }
+
+    async fn confirm_modal(&mut self) {
+        match &self.modal {
+            Modal::Rename { buffer } => {
+                let new_title = buffer.clone();
+                if let Some(conv) = self.conversations.get_mut(self.sidebar_selection) {
+                    conv.title = new_title;
+                    conv.updated_at = Utc::now();
+                    let _ = self.conversation_repo.update(conv).await;
+                }
+                self.modal = Modal::None;
+            }
+            Modal::DeleteConfirm {
+                conversation_id, ..
+            } => {
+                let id = *conversation_id;
+                let _ = self.conversation_repo.delete(id).await;
+                self.conversations.retain(|c| c.id != id);
+                if self.active_conversation == Some(id) {
+                    self.active_conversation = None;
+                    self.messages.clear();
+                }
+                if !self.conversations.is_empty()
+                    && self.sidebar_selection >= self.conversations.len()
+                {
+                    self.sidebar_selection = self.conversations.len() - 1;
+                }
+                self.modal = Modal::None;
+            }
+            _ => {
+                self.modal = Modal::None;
             }
         }
     }
