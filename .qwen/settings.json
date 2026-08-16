@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check)",
+      "Bash(cd *)",
+      "Bash(cargo test)"
+    ]
+  },
+  "$version": 4
+}

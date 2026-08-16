@@ -5,9 +5,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
-use crate::domain::{Capabilities, GenerationParameters, GenerationUsage, Message, Model, Provider, Role};
+use crate::domain::{Capabilities, GenerationUsage, Model, Provider, Role};
 use crate::llm::provider::{ChatRequest, ChatResponse, LlmError, LlmProvider, StreamEvent};
 
 #[derive(Clone)]

@@ -4,7 +4,8 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub enum UserEvent {
     Quit,
-    InputChanged(String),
+    InputChar(char),
+    Backspace,
     SendMessage,
     NewConversation,
     CancelGeneration,
