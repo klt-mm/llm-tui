@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use llm_tui::app::{App, Command, Modal};
-use llm_tui::config::GenerationConfig;
+use llm_tui::config::{ContextConfig, GenerationConfig};
 use llm_tui::events::{AppEvent, UserEvent};
 use llm_tui::llm::FakeProvider;
 use llm_tui::persistence::{
@@ -35,6 +35,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
         provider_repo,
         prompt_repo,
         GenerationConfig::default(),
+        ContextConfig::default(),
         event_tx,
     )
 }
@@ -242,6 +243,7 @@ async fn generation_settings_opens_with_current_values() {
         provider_repo,
         prompt_repo,
         gen_config,
+        ContextConfig::default(),
         event_tx,
     );
     app.init().await;
@@ -335,6 +337,7 @@ async fn generation_settings_empty_fields_become_none() {
         provider_repo,
         prompt_repo,
         gen_config,
+        ContextConfig::default(),
         event_tx,
     );
     app.init().await;

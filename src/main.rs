@@ -78,6 +78,7 @@ async fn main() -> Result<()> {
         provider_repo,
         prompt_repo,
         config.generation,
+        config.context,
         event_tx,
     );
 

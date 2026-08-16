@@ -6,7 +6,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::config::GenerationConfig;
+use crate::config::{ContextConfig, GenerationConfig};
+use crate::context::{self, ContextPolicy};
 use crate::domain::{
     Conversation, GenerationParameters, GenerationUsage, Message, Model, Prompt, Provider,
     ProviderProtocol, Role,
@@ -149,6 +150,7 @@ pub struct App {
     pub should_quit: bool,
     pub error: Option<String>,
     pub generation: GenerationConfig,
+    pub context: ContextConfig,
     pub sidebar_focus: bool,
     pub sidebar_selection: usize,
     pub modal: Modal,
@@ -190,6 +192,7 @@ impl App {
         provider_repo: Arc<dyn ProviderRepository>,
         prompt_repo: Arc<dyn PromptRepository>,
         generation: GenerationConfig,
+        context: ContextConfig,
         event_tx: mpsc::Sender<AppEvent>,
     ) -> Self {
         Self {
@@ -205,6 +208,7 @@ impl App {
             should_quit: false,
             error: None,
             generation,
+            context,
             sidebar_focus: false,
             sidebar_selection: 0,
             modal: Modal::None,
@@ -957,9 +961,29 @@ impl App {
             }
         };
 
+        let model_context_length = self
+            .models
+            .iter()
+            .find(|m| m.id == model)
+            .and_then(|m| m.context_length);
+
+        let system_prompt = self
+            .conversations
+            .iter()
+            .find(|c| c.id == conversation_id)
+            .and_then(|c| c.system_prompt.as_deref());
+
+        let policy = ContextPolicy {
+            max_tokens: self.context.max_tokens,
+            reserve_for_response: self.context.reserve_for_response,
+        };
+
+        let bounded_messages =
+            context::build_context(system_prompt, &self.messages, model_context_length, &policy);
+
         let request = ChatRequest {
             model,
-            messages: self.messages.clone(),
+            messages: bounded_messages,
             generation: self.build_generation_params(),
         };
 
@@ -1158,6 +1182,25 @@ impl App {
                 .unwrap_or(0) as usize;
             (tokens, elapsed)
         })
+    }
+
+    pub fn context_info(&self) -> (usize, Option<usize>) {
+        let system_prompt = self
+            .active_conversation
+            .and_then(|id| self.conversations.iter().find(|c| c.id == id))
+            .and_then(|c| c.system_prompt.as_deref());
+
+        let used = context::total_tokens(system_prompt, &self.messages);
+
+        let model_ctx = self
+            .selected_model
+            .as_deref()
+            .and_then(|m| self.models.iter().find(|model| model.id == m))
+            .and_then(|m| m.context_length);
+
+        let budget = self.context.max_tokens.or(model_ctx.map(|c| c as usize));
+
+        (used, budget)
     }
 
     async fn open_selected_conversation(&mut self) {

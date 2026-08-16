@@ -170,6 +170,23 @@ fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layou
         String::new()
     };
 
+    let (ctx_used, ctx_budget) = app.context_info();
+    let ctx_info = if ctx_used > 0 {
+        match ctx_budget {
+            Some(budget) => {
+                let used_k = ctx_used as f64 / 1000.0;
+                let budget_k = budget as f64 / 1000.0;
+                format!(" | {:.1}k/{:.0}k tok", used_k, budget_k)
+            }
+            None => {
+                let used_k = ctx_used as f64 / 1000.0;
+                format!(" | {:.1}k tok", used_k)
+            }
+        }
+    } else {
+        String::new()
+    };
+
     let error = app
         .error
         .as_ref()
@@ -191,7 +208,7 @@ fn render_status_bar(frame: &mut ratatui::Frame, app: &App, area: ratatui::layou
             format!("{} ", app.provider_name),
             Style::default().fg(Color::Yellow),
         ),
-        Span::raw(format!("| {model}{streaming_info}")),
+        Span::raw(format!("| {model}{streaming_info}{ctx_info}")),
         Span::styled(error, Style::default().fg(Color::Red)),
     ]);
 

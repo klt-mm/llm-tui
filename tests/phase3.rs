@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use llm_tui::app::{ActiveScreen, App, Modal};
-use llm_tui::config::GenerationConfig;
+use llm_tui::config::{ContextConfig, GenerationConfig};
 use llm_tui::domain::*;
 use llm_tui::events::{AppEvent, UserEvent};
 use llm_tui::llm::FakeProvider;
@@ -39,6 +39,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
         provider_repo,
         prompt_repo,
         GenerationConfig::default(),
+        ContextConfig::default(),
         event_tx,
     )
 }

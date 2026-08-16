@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use llm_tui::app::App;
-use llm_tui::config::{Config, GenerationConfig, ProviderConfig};
+use llm_tui::config::{Config, ContextConfig, GenerationConfig, ProviderConfig};
 use llm_tui::domain::{Model, ProviderProtocol};
 use llm_tui::events::{AppEvent, UserEvent};
 use llm_tui::llm::FakeProvider;
@@ -38,6 +38,7 @@ fn make_app(db: &Database, event_tx: mpsc::Sender<AppEvent>) -> App {
         provider_repo,
         prompt_repo,
         GenerationConfig::default(),
+        ContextConfig::default(),
         event_tx,
     )
 }
@@ -77,6 +78,7 @@ fn config_with_base_url_is_configured() {
             ..Default::default()
         },
         generation: GenerationConfig::default(),
+        context: ContextConfig::default(),
     };
     assert!(config.is_provider_configured());
 }
@@ -247,6 +249,7 @@ async fn generation_config_passed_to_chat_request() {
         provider_repo,
         prompt_repo,
         gen_config,
+        ContextConfig::default(),
         event_tx.clone(),
     );
     app.init().await;

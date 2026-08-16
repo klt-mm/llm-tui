@@ -7,6 +7,8 @@ pub struct Config {
     pub provider: ProviderConfig,
     #[serde(default)]
     pub generation: GenerationConfig,
+    #[serde(default)]
+    pub context: ContextConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -22,6 +24,26 @@ pub struct GenerationConfig {
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub max_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ContextConfig {
+    pub max_tokens: Option<usize>,
+    #[serde(default = "default_reserve")]
+    pub reserve_for_response: usize,
+}
+
+fn default_reserve() -> usize {
+    1024
+}
+
+impl Default for ContextConfig {
+    fn default() -> Self {
+        Self {
+            max_tokens: None,
+            reserve_for_response: default_reserve(),
+        }
+    }
 }
 
 impl Config {
