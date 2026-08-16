@@ -406,26 +406,20 @@ Press `Ctrl+G` to adjust:
 <div align="center">
 
 ```
-┌─────────────────────────────────────┐
-│         TUI (ratatui)               │
-└─────────────────────────────────────┘
-                  ↓
-┌─────────────────────────────────────┐
-│   Application / Services            │
-│      (app.rs, events.rs)            │
-└─────────────────────────────────────┘
-                  ↓
-┌─────────────────────────────────────┐
-│         Domain Layer                │
-│  (must not import infrastructure)   │
-├──────────────────┬──────────────────┤
-│  LLM Provider    │   Repositories   │
-│   (src/llm/)     │(src/persistence/)│
-└──────────────────┴──────────────────┘
-                  ↓
-┌─────────────────────────────────────┐
-│      SQLite + FTS5                  │
-└─────────────────────────────────────┘
+TUI (ratatui)
+      ↓
+Application / Services
+   (app.rs, events.rs)
+      ↓
+   Domain Layer
+(must not import infrastructure)
+      ↓
+┌─────────────┬─────────────┐
+│ LLM Provider│ Repositories│
+│  (src/llm/) │(src/persist)│
+└─────────────┴─────────────┘
+      ↓
+  SQLite + FTS5
 ```
 
 </div>
